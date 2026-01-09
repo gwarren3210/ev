@@ -196,15 +196,14 @@ Calculates the Expected Value (EV) for a specific bet by comparing target book o
 ### Example Request
 
 ```bash
-curl -X POST http://localhost:8080/calculate-ev \
+curl -X POST https://stokastic.vercel.app/calculate-ev \
   -H "Content-Type: application/json" \
   -d '{
-    "offerId": "nba-player-points",
-    "playerId": "player-123",
-    "sharps": ["Pinnacle", "BookMaker"],
-    "targetBook": "DraftKings",
-    "line": 25.5,
-    "side": "Over",
+    "offerId":"aa4dd9a9-6aec-44f9-8ae0-3599520b9351",
+    "sharps":["Kalshi","NoVig", "BetMGM"],
+    "targetBook":"BetRivers",
+    "playerId":"1a1f9906-2493-4446-a4bd-c013bc30e7e2",
+    "line":18.5,"side":"Over",
     "devigMethod": "multiplicative"
   }'
 ```
