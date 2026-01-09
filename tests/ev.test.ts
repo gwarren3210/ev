@@ -1,15 +1,21 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import {
   hasCompleteMarket,
   findSpecificOffer,
   findAvailableSharpBooks,
   findTargetOutcomes,
   calculateAverageTrueProbability,
+  calculateEV,
+  calculateEVFromOffer,
+  extractAmericanOdds,
 } from "../src/logic/ev";
+import { mock } from "bun:test";
+import { resetRedisState } from "../src/cache/redis";
 import { devigOdds } from "../src/logic/devig";
 import {
   CalculationError,
   OfferNotFoundError,
+  OfferNotFoundForPlayerError,
   ApiError,
   NoSharpOutcomesError,
   TargetOutcomeNotFoundError,
@@ -17,7 +23,7 @@ import {
   DevigError,
   OneSidedMarketError,
 } from "../src/errors";
-import { calculateEVPercentage as calculateEV } from "../src/utils/odds";
+import { calculateEVPercentage } from "../src/utils/odds";
 
 import type { Outcome } from '../src/types';
 
@@ -61,69 +67,69 @@ function createOffer(overrides = {}) {
 // ==========================================
 // calculateEV tests
 // ==========================================
-describe("calculateEV", () => {
+describe("calculateEVPercentage", () => {
   it("returns -100% when probability is zero", () => {
-    const result = calculateEV(0, 2.0);
+    const result = calculateEVPercentage(0, 2.0);
     expect(result).toBe(-100);
   });
 
   it("returns correct EV for 100% probability", () => {
     // EV = (1.0 * 2.0 - 1) * 100 = 100%
-    const result = calculateEV(1.0, 2.0);
+    const result = calculateEVPercentage(1.0, 2.0);
     expect(result).toBe(100);
   });
 
   it("returns correct EV for typical odds", () => {
     // 50% probability at 2.0 odds: (0.5 * 2.0 - 1) * 100 = 0%
-    const result = calculateEV(0.5, 2.0);
+    const result = calculateEVPercentage(0.5, 2.0);
     expect(result).toBe(0);
   });
 
   it("returns positive EV when probability exceeds implied odds", () => {
     // 60% probability at 2.0 odds: (0.6 * 2.0 - 1) * 100 = 20%
-    const result = calculateEV(0.6, 2.0);
+    const result = calculateEVPercentage(0.6, 2.0);
     expect(result).toBeCloseTo(20);
   });
 
   it("returns negative EV when probability is below implied odds", () => {
     // 40% probability at 2.0 odds: (0.4 * 2.0 - 1) * 100 = -20%
-    const result = calculateEV(0.4, 2.0);
+    const result = calculateEVPercentage(0.4, 2.0);
     expect(result).toBeCloseTo(-20);
   });
 
   it("handles probability > 1 (invalid but should compute)", () => {
     // 1.5 * 2.0 - 1 = 2 => 200%
-    const result = calculateEV(1.5, 2.0);
+    const result = calculateEVPercentage(1.5, 2.0);
     expect(result).toBe(200);
   });
 
   it("handles negative probability (invalid but should compute)", () => {
     // -0.5 * 2.0 - 1 = -2 => -200%
-    const result = calculateEV(-0.5, 2.0);
+    const result = calculateEVPercentage(-0.5, 2.0);
     expect(result).toBe(-200);
   });
 
   it("handles odds = 1 (break-even odds)", () => {
     // 0.5 * 1.0 - 1 = -0.5 => -50%
-    const result = calculateEV(0.5, 1.0);
+    const result = calculateEVPercentage(0.5, 1.0);
     expect(result).toBe(-50);
   });
 
   it("handles very high odds (long shot)", () => {
     // 10% probability at 15.0 odds: (0.1 * 15.0 - 1) * 100 = 50%
-    const result = calculateEV(0.1, 15.0);
+    const result = calculateEVPercentage(0.1, 15.0);
     expect(result).toBeCloseTo(50);
   });
 
   it("handles very low odds (heavy favorite)", () => {
     // 90% probability at 1.05 odds: (0.9 * 1.05 - 1) * 100 = -5.5%
-    const result = calculateEV(0.9, 1.05);
+    const result = calculateEVPercentage(0.9, 1.05);
     expect(result).toBeCloseTo(-5.5);
   });
 
   it("handles extreme long shot odds", () => {
     // 1% probability at 150.0 odds: (0.01 * 150.0 - 1) * 100 = 50%
-    const result = calculateEV(0.01, 150.0);
+    const result = calculateEVPercentage(0.01, 150.0);
     expect(result).toBeCloseTo(50);
   });
 });
@@ -282,20 +288,20 @@ describe("hasCompleteMarket", () => {
 // findSpecificOffer tests
 // ==========================================
 describe("findSpecificOffer", () => {
-  it("returns OfferNotFoundError for empty offers array", () => {
+  it("returns OfferNotFoundForPlayerError for empty offers array", () => {
     const result = findSpecificOffer([], "player1");
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error).toBeInstanceOf(OfferNotFoundError);
+      expect(result.error).toBeInstanceOf(OfferNotFoundForPlayerError);
     }
   });
 
-  it("returns OfferNotFoundError when playerId not found", () => {
+  it("returns OfferNotFoundForPlayerError when playerId not found", () => {
     const offers = [createOffer({ participants: [{ id: "player1", name: "Test", title: "", isHome: true, participantLogo: "", participantType: "" }] })];
     const result = findSpecificOffer(offers, "player999");
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error).toBeInstanceOf(OfferNotFoundError);
+      expect(result.error).toBeInstanceOf(OfferNotFoundForPlayerError);
     }
   });
 
@@ -330,7 +336,7 @@ describe("findSpecificOffer", () => {
     const result = findSpecificOffer([offer], "player1");
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error).toBeInstanceOf(OfferNotFoundError);
+      expect(result.error).toBeInstanceOf(OfferNotFoundForPlayerError);
     }
   });
 });
@@ -596,6 +602,20 @@ describe("OfferNotFoundError", () => {
   });
 });
 
+describe("OfferNotFoundForPlayerError", () => {
+  it("formats message with playerId", () => {
+    const error = new OfferNotFoundForPlayerError("player123");
+    expect(error.message).toContain("player123");
+    expect(error.code).toBe("OFFER_NOT_FOUND_FOR_PLAYER");
+    expect(error.name).toBe("OfferNotFoundForPlayerError");
+  });
+
+  it("extends CalculationError", () => {
+    const error = new OfferNotFoundForPlayerError("player1");
+    expect(error).toBeInstanceOf(CalculationError);
+  });
+});
+
 describe("ApiError", () => {
   it("instantiates with message and optional statusCode", () => {
     const error = new ApiError("API failed", 500);
@@ -657,5 +677,317 @@ describe("DevigError", () => {
   it("extends CalculationError", () => {
     const error = new DevigError("msg");
     expect(error).toBeInstanceOf(CalculationError);
+  });
+});
+
+// ==========================================
+// calculateEV integration tests
+// ==========================================
+describe("calculateEV", () => {
+  const originalFetch = global.fetch;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    resetRedisState();
+    process.env = { ...originalEnv };
+    process.env.ODDSSHOPPER_API_URL = "https://api.example.com";
+    delete process.env.REDIS_URL; // Disable Redis for simpler testing
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    process.env = { ...originalEnv };
+  });
+
+  it("returns cached result when available (cache hit)", async () => {
+    // Enable Redis for this test
+    process.env.REDIS_URL = "redis://localhost:6379";
+
+    const mockOffer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          label: "Over",
+          outcomes: [
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    global.fetch = mock(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [mockOffer],
+    })) as any;
+
+    const request = {
+      offerId: "offer123",
+      playerId: "player1",
+      line: 5.5,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+    };
+
+    // First call - should calculate and cache
+    const result1 = await calculateEV(request);
+    expect(result1.success).toBe(true);
+
+    // Second call - should return cached result (line 46)
+    const result2 = await calculateEV(request);
+    expect(result2.success).toBe(true);
+    if (result1.success && result2.success) {
+      expect(result2.value).toEqual(result1.value);
+    }
+  });
+
+  it("bypasses cache when skipCache is true", async () => {
+    const mockOffer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          label: "Over",
+          outcomes: [
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    global.fetch = mock(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [mockOffer],
+    })) as any;
+
+    const request = {
+      offerId: "offer123",
+      playerId: "player1",
+      line: 5.5,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+    };
+
+    const result = await calculateEV(request, { skipCache: true });
+    expect(result.success).toBe(true);
+  });
+
+  it("returns error when API fetch fails", async () => {
+    global.fetch = mock(async () => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+    })) as any;
+
+    const request = {
+      offerId: "offer123",
+      playerId: "player1",
+      line: -110,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+    };
+
+    const result = await calculateEV(request);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(ApiError);
+    }
+  });
+
+  it("returns error when offer not found via API 404", async () => {
+    global.fetch = mock(async () => ({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+    })) as any;
+
+    const request = {
+      offerId: "nonexistent",
+      playerId: "player1",
+      line: -110,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+    };
+
+    const result = await calculateEV(request);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(OfferNotFoundError);
+    }
+  });
+
+  it("returns error when player not found in fetched offers (line 60)", async () => {
+    // API succeeds but returns offers for different players
+    const mockOffer = createOffer({
+      participants: [{ id: "player999", name: "Different Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [],
+    });
+
+    global.fetch = mock(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => [mockOffer],
+    })) as any;
+
+    const request = {
+      offerId: "offer123",
+      playerId: "player1", // Looking for player1 but API returns player999
+      line: -110,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+    };
+
+    const result = await calculateEV(request);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(OfferNotFoundForPlayerError);
+      expect(result.error.message).toContain("player1");
+    }
+  });
+});
+
+describe("calculateEVFromOffer", () => {
+  it("returns error when target book has no outcomes at requested line", () => {
+    const offer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          outcomes: [
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "-120", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "+100", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    const request = {
+      playerId: "player1",
+      line: 6.5, // Request line doesn't match any outcome line (5.5)
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+    };
+
+    const result = calculateEVFromOffer(offer, request);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(TargetOutcomeNotFoundError);
+      expect(result.error.message).toContain("not found");
+    }
+  });
+
+  it("successfully calculates EV when all conditions are met", () => {
+    const offer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          outcomes: [
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    const request = {
+      playerId: "player1",
+      line: 5.5,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+    };
+
+    const result = calculateEVFromOffer(offer, request);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.player).toBe("Test Player");
+      expect(result.value.targetOdds).toBe(-110);
+    }
+  });
+});
+
+describe("extractAmericanOdds", () => {
+  it("returns error when outcome for side is missing", () => {
+    const outcomes = [
+      createOutcome({ label: "Under", americanOdds: "-110" }),
+    ];
+
+    const result = extractAmericanOdds(outcomes, "Over");
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(CalculationError);
+      expect(result.error.message).toContain("side missing");
+    }
+  });
+
+  it("returns error when American odds are invalid (non-numeric)", () => {
+    const outcomes = [
+      createOutcome({ label: "Over", americanOdds: "invalid" }),
+    ];
+
+    const result = extractAmericanOdds(outcomes, "Over");
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(CalculationError);
+      expect(result.error.message).toContain("Invalid American odds");
+    }
+  });
+
+  it("successfully extracts valid positive American odds", () => {
+    const outcomes = [
+      createOutcome({ label: "Over", americanOdds: "+150" }),
+    ];
+
+    const result = extractAmericanOdds(outcomes, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value).toBe(150);
+    }
+  });
+
+  it("successfully extracts valid negative American odds", () => {
+    const outcomes = [
+      createOutcome({ label: "Over", americanOdds: "-110" }),
+    ];
+
+    const result = extractAmericanOdds(outcomes, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value).toBe(-110);
+    }
+  });
+
+  it("handles odds without + or - prefix", () => {
+    const outcomes = [
+      createOutcome({ label: "Over", americanOdds: "100" }),
+    ];
+
+    const result = extractAmericanOdds(outcomes, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value).toBe(100);
+    }
   });
 });

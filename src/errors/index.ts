@@ -13,6 +13,13 @@ export class OfferNotFoundError extends CalculationError {
     }
 }
 
+export class OfferNotFoundForPlayerError extends CalculationError {
+    constructor(playerId: string) {
+        super(`Offer not found for player ID: ${playerId}`, 'OFFER_NOT_FOUND_FOR_PLAYER', 404);
+        this.name = 'OfferNotFoundForPlayerError';
+    }
+}
+
 export class ApiError extends CalculationError {
     constructor(message: string, public statusCode?: number) {
         super(message, 'API_ERROR', statusCode || 502);

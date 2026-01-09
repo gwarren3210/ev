@@ -169,6 +169,14 @@ Calculates the Expected Value (EV) for a specific bet by comparing target book o
 }
 ```
 
+Or when player not found in offer:
+```json
+{
+  "error": "Offer not found for player ID: player-123",
+  "code": "OFFER_NOT_FOUND_FOR_PLAYER"
+}
+```
+
 **409 Conflict** - One-sided market:
 ```json
 {

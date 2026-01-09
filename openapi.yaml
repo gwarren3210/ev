@@ -127,6 +127,11 @@ paths:
                   value:
                     error: "Offer not found for ID: invalid-offer-123"
                     code: "OFFER_NOT_FOUND"
+                offerNotFoundForPlayer:
+                  summary: Player not found in offer
+                  value:
+                    error: "Offer not found for player ID: player-123"
+                    code: "OFFER_NOT_FOUND_FOR_PLAYER"
                 targetOutcomeNotFound:
                   summary: Target book not available
                   value:
@@ -322,6 +327,7 @@ components:
           description: Machine-readable error code
           enum:
             - OFFER_NOT_FOUND
+            - OFFER_NOT_FOUND_FOR_PLAYER
             - TARGET_OUTCOME_NOT_FOUND
             - TARGET_BOOK_SIDE_MISSING
             - ONE_SIDED_MARKET

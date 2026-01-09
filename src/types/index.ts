@@ -160,3 +160,47 @@ export interface CalculateEVResponse {
 export type Result<T, E extends Error = Error> =
     | { success: true; value: T }
     | { success: false; error: E };
+
+// ============================================
+// Batch Processing Types
+// ============================================
+
+/**
+ * A single item in a batch EV calculation request.
+ * Note: offerId is shared across all items in the batch.
+ */
+export interface BatchEVItem {
+    playerId: string;
+    line: number;
+    side: 'Over' | 'Under';
+    targetBook: string;
+    sharps: string[];
+    devigMethod: DevigMethod;
+}
+
+/**
+ * Request body for batch EV calculation.
+ * All items must share the same offerId.
+ */
+export interface BatchCalculateEVRequest {
+    offerId: string;
+    items: BatchEVItem[];
+}
+
+/**
+ * Result for a single item in a batch response.
+ */
+export type BatchItemResult =
+    | { index: number; success: true; result: CalculateEVResponse }
+    | { index: number; success: false; error: { code: string; message: string } };
+
+/**
+ * Response body for batch EV calculation.
+ */
+export interface BatchCalculateEVResponse {
+    offerId: string;
+    totalItems: number;
+    successCount: number;
+    errorCount: number;
+    results: BatchItemResult[];
+}
