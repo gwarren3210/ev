@@ -1,7 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { z } from 'zod';
-import type { CalculateEVRequest } from '../types';
-import { calculateEV } from '../logic/ev';
+import { calculateEV } from './logic/ev.ts';
 
 const app = express();
 

@@ -5,8 +5,8 @@ import type {
     Outcome,
     Result,
     DevigMethod,
-} from '../types';
-import { DataSchema } from '../types';
+} from '../types/index.ts';
+import { DataSchema } from '../types/index.ts';
 import {
     CalculationError,
     OfferNotFoundError,
@@ -16,10 +16,10 @@ import {
     TargetOutcomeNotFoundError,
     TargetOutcomeNotCompleteError,
     DevigError
-} from '../errors';
-import { devigOdds } from './devig';
-import { americanToDecimal, calculateEVPercentage } from '../utils/odds';
-import { getEnvironment } from '../config/env';
+} from '../errors/index.ts';
+import { devigOdds } from './devig.ts';
+import { americanToDecimal, calculateEVPercentage } from '../utils/odds.ts';
+import { getEnvironment } from '../config/env.ts';
 /**
  * Orchestrates the calculation of Expected Value (EV) for a given bet.
  * 

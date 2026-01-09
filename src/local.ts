@@ -1,5 +1,5 @@
-import app from './server/app';
-import { validateEnvironment } from './config/env';
+import app from './server.ts';
+import { validateEnvironment } from './config/env.ts';
 
 /**
  * Starts the local development server with environment validation and logging
