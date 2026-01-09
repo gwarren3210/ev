@@ -31,7 +31,7 @@ This service fetches live odds from the OddsShopper API, removes bookmaker vigor
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd stokastic-interview2
+cd ev
 
 # Install dependencies
 bun install
