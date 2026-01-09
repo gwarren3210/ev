@@ -1,5 +1,5 @@
-import type { Outcome, DevigMethod, Result } from '../types/index.ts';
-import { DevigError } from '../errors/index.ts';
+import type { Outcome, DevigMethod, Result } from '../types/index.js';
+import { DevigError } from '../errors/index.js';
 
 /**
  * Removes the bookmaker's "vig" (overround) from market odds to estimate the true probability.

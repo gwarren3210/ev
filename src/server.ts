@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import { z } from 'zod';
-import { calculateEV } from './logic/ev.ts';
+import { calculateEV } from './logic/ev.js';
 
 const app = express();
 
