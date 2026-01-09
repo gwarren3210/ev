@@ -86,6 +86,46 @@ against aggregated sharp book probabilities.
         }
       }
     },
+    "/calculate-ev/sample": {
+      get: {
+        summary: "Get Sample Request",
+        description: `Returns a live sample request body for the /calculate-ev endpoint.
+Fetches real data from OddsShopper API to generate a valid request that can be used immediately.
+
+The response includes:
+- A description of the sample
+- The request body to send to POST /calculate-ev
+- A ready-to-use curl command`,
+        operationId: "getSample",
+        tags: ["Samples"],
+        responses: {
+          "200": {
+            description: "Sample request generated successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/SampleResponse" }
+              }
+            }
+          },
+          "503": {
+            description: "No live sample data available",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GenericError" }
+              }
+            }
+          },
+          "500": {
+            description: "Internal server error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GenericError" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/calculate-ev/batch": {
       post: {
         summary: "Batch Calculate Expected Value",
@@ -124,6 +164,47 @@ to fetch market data, improving efficiency.
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ValidationError" }
+              }
+            }
+          },
+          "500": {
+            description: "Internal server error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GenericError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/calculate-ev/batch/sample": {
+      get: {
+        summary: "Get Sample Batch Request",
+        description: `Returns a live sample request body for the /calculate-ev/batch endpoint.
+Fetches real data from OddsShopper API to generate a valid batch request with multiple players.
+
+The response includes:
+- A description of the sample
+- Player names included in the batch
+- The request body to send to POST /calculate-ev/batch
+- A ready-to-use curl command`,
+        operationId: "getBatchSample",
+        tags: ["Samples"],
+        responses: {
+          "200": {
+            description: "Sample batch request generated successfully",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BatchSampleResponse" }
+              }
+            }
+          },
+          "503": {
+            description: "No live sample data available",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/GenericError" }
               }
             }
           },
@@ -267,11 +348,29 @@ to fetch market data, improving efficiency.
         properties: {
           error: { type: "string" }
         }
+      },
+      SampleResponse: {
+        type: "object",
+        properties: {
+          description: { type: "string", description: "Description of the sample data" },
+          request: { $ref: "#/components/schemas/CalculateEVRequest" },
+          curl: { type: "string", description: "Ready-to-use curl command" }
+        }
+      },
+      BatchSampleResponse: {
+        type: "object",
+        properties: {
+          description: { type: "string", description: "Description of the sample data" },
+          playerNames: { type: "array", items: { type: "string" }, description: "Names of players in the batch" },
+          request: { $ref: "#/components/schemas/BatchCalculateEVRequest" },
+          curl: { type: "string", description: "Ready-to-use curl command" }
+        }
       }
     }
   },
   tags: [
     { name: "EV Calculation", description: "Calculate expected value for sports bets" },
+    { name: "Samples", description: "Get sample requests with live data" },
     { name: "Health", description: "Health check endpoints" }
   ]
 } as const;

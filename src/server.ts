@@ -4,6 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 import { calculateEV } from './logic/ev.js';
 import { calculateEVBatch } from './logic/batch.js';
 import { openApiSpec } from './openapi.js';
+import { fetchSingleSample, fetchBatchSample } from './services/sample.js';
 
 const app = express();
 
@@ -58,6 +59,34 @@ app.post('/calculate-ev', async (req: Request, res: Response) => {
     }
 });
 
+app.get('/calculate-ev/sample', async (req: Request, res: Response) => {
+    try {
+        const sample = await fetchSingleSample();
+        if (!sample) {
+            return res.status(503).json({ error: 'No live sample data available' });
+        }
+
+        const sampleRequest = {
+            offerId: sample.offerId,
+            playerId: sample.player.playerId,
+            line: sample.player.line,
+            side: "Over",
+            targetBook: sample.player.targetBook,
+            sharps: [sample.player.sharpBook],
+            devigMethod: "multiplicative",
+        };
+
+        return res.json({
+            description: `Sample request for ${sample.player.playerName}`,
+            request: sampleRequest,
+            curl: `curl -X POST 'https://stokastic.vercel.app/calculate-ev' -H 'Content-Type: application/json' -d '${JSON.stringify(sampleRequest)}'`
+        });
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+        return res.status(500).json({ error: errorMessage });
+    }
+});
+
 // Batch request validation schema
 const batchItemSchema = z.object({
     playerId: z.string(),
@@ -96,6 +125,37 @@ app.post('/calculate-ev/batch', async (req: Request, res: Response) => {
     }
 });
 
+app.get('/calculate-ev/batch/sample', async (req: Request, res: Response) => {
+    try {
+        const sample = await fetchBatchSample();
+        if (!sample) {
+            return res.status(503).json({ error: 'No live sample data available' });
+        }
+
+        const sampleRequest = {
+            offerId: sample.offerId,
+            items: sample.players.map(player => ({
+                playerId: player.playerId,
+                line: player.line,
+                side: "Over" as const,
+                targetBook: player.targetBook,
+                sharps: [player.sharpBook],
+                devigMethod: "multiplicative" as const,
+            }))
+        };
+
+        return res.json({
+            description: `Batch sample with ${sample.players.length} players`,
+            playerNames: sample.players.map(p => p.playerName),
+            request: sampleRequest,
+            curl: `curl -X POST 'https://stokastic.vercel.app/calculate-ev/batch' -H 'Content-Type: application/json' -d '${JSON.stringify(sampleRequest)}'`
+        });
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+        return res.status(500).json({ error: errorMessage });
+    }
+});
+
 app.get("/test", (req: Request, res: Response) => {
     res.send("test");
 });
@@ -119,7 +179,9 @@ app.get('/', (req: Request, res: Response) => {
             <ul>
                 <li><a href="/docs">API Documentation</a></li>
                 <li><code>POST /calculate-ev</code> - Calculate EV for a single bet</li>
+                <li><code>GET /calculate-ev/sample</code> - <a href="/calculate-ev/sample">Get sample request</a></li>
                 <li><code>POST /calculate-ev/batch</code> - Calculate EV for multiple bets</li>
+                <li><code>GET /calculate-ev/batch/sample</code> - <a href="/calculate-ev/batch/sample">Get sample batch request</a></li>
             </ul>
         </body>
         </html>
