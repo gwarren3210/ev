@@ -1,14 +1,9 @@
 import express, { type Request, type Response } from 'express';
 import { z } from 'zod';
 import swaggerUi from 'swagger-ui-express';
-import yaml from 'js-yaml';
 import { calculateEV } from './logic/ev.js';
 import { calculateEVBatch } from './logic/batch.js';
-
-// Load OpenAPI specification
-const openApiSpec = yaml.load(
-    await Bun.file('./openapi.yaml').text()
-) as swaggerUi.JsonObject;
+import { openApiSpec } from './openapi.js';
 
 const app = express();
 
@@ -105,13 +100,40 @@ app.get("/test", (req: Request, res: Response) => {
     res.send("test");
 });
 
-// Swagger UI documentation at root
-app.use('/', swaggerUi.serve);
-app.get('/', swaggerUi.setup(openApiSpec));
-
-// Catch-all: redirect unspecified routes to root
-app.use('/{*splat}', (req: Request, res: Response) => {
-    res.redirect('/');
+// Simple landing page
+app.get('/', (req: Request, res: Response) => {
+    res.send(`
+        <html>
+        <head>
+            <title>EV Calculator API</title>
+            <style>
+                body { font-family: system-ui, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+                h1 { color: #333; }
+                a { color: #0066cc; }
+                code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+            </style>
+        </head>
+        <body>
+            <h1>EV Calculator API</h1>
+            <p>Sports betting expected value calculator.</p>
+            <ul>
+                <li><a href="/docs">API Documentation</a></li>
+                <li><code>POST /calculate-ev</code> - Calculate EV for a single bet</li>
+                <li><code>POST /calculate-ev/batch</code> - Calculate EV for multiple bets</li>
+            </ul>
+        </body>
+        </html>
+    `);
 });
+
+// Swagger UI documentation - using CDN for serverless compatibility
+const swaggerOptions = {
+    customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
+    customJs: [
+        'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.min.js'
+    ]
+};
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, swaggerOptions));
 
 export default app;
