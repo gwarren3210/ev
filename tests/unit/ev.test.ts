@@ -8,10 +8,11 @@ import {
   calculateEV,
   calculateEVFromOffer,
   extractAmericanOdds,
-} from "../src/logic/ev";
+  findBestOddsAcrossBooks,
+} from "../../src/logic/ev";
 import { mock } from "bun:test";
-import { resetRedisState } from "../src/cache/redis";
-import { devigOdds } from "../src/logic/devig";
+import { resetRedisState } from "../../src/cache/redis";
+import { devigOdds } from "../../src/logic/devig";
 import {
   CalculationError,
   OfferNotFoundError,
@@ -22,8 +23,8 @@ import {
   TargetOutcomeNotCompleteError,
   DevigError,
   OneSidedMarketError,
-} from "../src/errors";
-import { calculateEVPercentage } from "../src/utils/odds";
+} from "../../src/errors";
+import { calculateEVPercentage } from "../../src/utils/odds";
 
 import type { Outcome } from '../src/types';
 
@@ -988,6 +989,370 @@ describe("extractAmericanOdds", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.value).toBe(100);
+    }
+  });
+});
+
+// ==========================================
+// Kelly Criterion integration tests
+// ==========================================
+describe("calculateEVFromOffer with Kelly", () => {
+  it("includes Kelly output when bankroll is provided", () => {
+    const offer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          outcomes: [
+            // Sharp has 55% on Over, which should create positive EV
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.55, americanOdds: "-122", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.45, americanOdds: "+100", line: "5.5" }),
+            // Target book offers even odds
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "+100", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "-120", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    const request = {
+      playerId: "player1",
+      line: 5.5,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+      bankroll: 10000,
+    };
+
+    const result = calculateEVFromOffer(offer, request);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.kelly).toBeDefined();
+      expect(result.value.kelly?.bankroll).toBe(10000);
+      expect(result.value.kelly?.full).toBeGreaterThan(0);
+      expect(result.value.kelly?.quarter).toBeCloseTo(result.value.kelly!.full * 0.25, 5);
+      expect(result.value.kelly?.recommendedBet).toBeCloseTo(10000 * result.value.kelly!.quarter, 5);
+      expect(result.value.kelly?.expectedProfit).toBeGreaterThan(0);
+    }
+  });
+
+  it("excludes Kelly output when bankroll is not provided", () => {
+    const offer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          outcomes: [
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "-110", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    const request = {
+      playerId: "player1",
+      line: 5.5,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+      // No bankroll
+    };
+
+    const result = calculateEVFromOffer(offer, request);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.kelly).toBeUndefined();
+    }
+  });
+
+  it("returns 0 recommended bet for negative EV bets", () => {
+    const offer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          outcomes: [
+            // Sharp shows 40% on Over (negative EV at even odds)
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.4, americanOdds: "+150", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.6, americanOdds: "-150", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "+100", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "-120", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    const request = {
+      playerId: "player1",
+      line: 5.5,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+      bankroll: 10000,
+    };
+
+    const result = calculateEVFromOffer(offer, request);
+    expect(result.success).toBe(true);
+    if (result.success && result.value.kelly) {
+      expect(result.value.kelly.full).toBe(0);
+      expect(result.value.kelly.quarter).toBe(0);
+      expect(result.value.kelly.recommendedBet).toBe(0);
+      // Use toBeCloseTo to handle -0 vs 0 edge case
+      expect(result.value.kelly.expectedProfit).toBeCloseTo(0, 5);
+    }
+  });
+
+  it("calculates expectedProfit using expectedValue", () => {
+    const offer = createOffer({
+      participants: [{ id: "player1", name: "Test Player", title: "", isHome: true, participantLogo: "", participantType: "" }],
+      sides: [
+        {
+          outcomes: [
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Over", odds: 0.6, americanOdds: "-150", line: "5.5" }),
+            createOutcome({ sportsbookCode: "PINNACLE", label: "Under", odds: 0.4, americanOdds: "+130", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", odds: 0.5, americanOdds: "+100", line: "5.5" }),
+            createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", odds: 0.5, americanOdds: "-120", line: "5.5" }),
+          ],
+        },
+      ],
+    });
+
+    const request = {
+      playerId: "player1",
+      line: 5.5,
+      side: "Over" as const,
+      targetBook: "DRAFTKINGS",
+      sharps: ["PINNACLE"],
+      devigMethod: "multiplicative" as const,
+      bankroll: 10000,
+    };
+
+    const result = calculateEVFromOffer(offer, request);
+    expect(result.success).toBe(true);
+    if (result.success && result.value.kelly) {
+      // expectedProfit = recommendedBet * (expectedValue / 100)
+      const expectedProfit = result.value.kelly.recommendedBet * (result.value.expectedValue / 100);
+      expect(result.value.kelly.expectedProfit).toBeCloseTo(expectedProfit, 5);
+    }
+  });
+});
+
+// ==========================================
+// findBestOddsAcrossBooks tests
+// ==========================================
+describe("findBestOddsAcrossBooks", () => {
+  it("returns error when no outcomes match line and side", () => {
+    const outcomes: Outcome[] = [];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toBeInstanceOf(CalculationError);
+      expect(result.error.message).toContain("No outcomes found");
+    }
+  });
+
+  it("returns error when outcomes exist but none match the specified line", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+110", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 6.5, "Over"); // Different line
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toContain("No outcomes found for line 6.5 Over");
+    }
+  });
+
+  it("returns error when outcomes exist but none match the specified side", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+110", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Under"); // Different side
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toContain("No outcomes found for line 5.5 Under");
+    }
+  });
+
+  it("returns the single matching outcome when only one exists", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "-110", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("DRAFTKINGS");
+      expect(result.value.americanOdds).toBe(-110);
+    }
+  });
+
+  it("returns best odds when comparing positive odds (+150 > +100)", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+150", line: "5.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "+120", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("FANDUEL");
+      expect(result.value.americanOdds).toBe(150);
+    }
+  });
+
+  it("returns best odds when comparing negative odds (-105 > -110 > -120)", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "-110", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "-120", line: "5.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "-105", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("BETMGM");
+      expect(result.value.americanOdds).toBe(-105);
+    }
+  });
+
+  it("returns best odds when comparing mixed positive and negative (+100 > -110)", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "-110", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "-105", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("FANDUEL");
+      expect(result.value.americanOdds).toBe(100);
+    }
+  });
+
+  it("filters by line correctly when multiple lines exist", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "+200", line: "6.5" }), // Different line, better odds
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "+120", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("BETMGM");
+      expect(result.value.americanOdds).toBe(120);
+    }
+  });
+
+  it("filters by side correctly when both sides exist", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", americanOdds: "+200", line: "5.5" }), // Different side, better odds
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "+120", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("BETMGM");
+      expect(result.value.americanOdds).toBe(120);
+    }
+  });
+
+  it("filters out outcomes with invalid (non-numeric) American odds", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "invalid", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "N/A", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("FANDUEL");
+      expect(result.value.americanOdds).toBe(100);
+    }
+  });
+
+  it("returns error when all outcomes have invalid odds", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "invalid", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "N/A", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toContain("No outcomes found");
+    }
+  });
+
+  it("works correctly for Under side", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Under", americanOdds: "-115", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Under", americanOdds: "-105", line: "5.5" }),
+      createOutcome({ sportsbookCode: "PINNACLE", label: "Under", americanOdds: "-110", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Under");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("FANDUEL");
+      expect(result.value.americanOdds).toBe(-105);
+    }
+  });
+
+  it("handles extreme positive odds correctly", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "+500", line: "10.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+1000", line: "10.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "+750", line: "10.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 10.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("FANDUEL");
+      expect(result.value.americanOdds).toBe(1000);
+    }
+  });
+
+  it("handles extreme negative odds correctly", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "-500", line: "0.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "-400", line: "0.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "-450", line: "0.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 0.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("FANDUEL");
+      expect(result.value.americanOdds).toBe(-400);
+    }
+  });
+
+  it("handles decimal line values correctly", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "-110", line: "22.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+100", line: "22.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 22.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.value.sportsbookCode).toBe("FANDUEL");
+      expect(result.value.americanOdds).toBe(100);
+    }
+  });
+
+  it("returns first book when multiple books have identical best odds", () => {
+    const outcomes = [
+      createOutcome({ sportsbookCode: "DRAFTKINGS", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "FANDUEL", label: "Over", americanOdds: "+100", line: "5.5" }),
+      createOutcome({ sportsbookCode: "BETMGM", label: "Over", americanOdds: "+100", line: "5.5" }),
+    ];
+    const result = findBestOddsAcrossBooks(outcomes, 5.5, "Over");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      // reduce() returns first element when all are equal
+      expect(result.value.americanOdds).toBe(100);
+      expect(["DRAFTKINGS", "FANDUEL", "BETMGM"]).toContain(result.value.sportsbookCode);
     }
   });
 });

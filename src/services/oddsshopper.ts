@@ -1,8 +1,8 @@
 import type { Offer, Result } from '../types/index.js';
 import { DataSchema } from '../types/index.js';
-import { ApiError, OfferNotFoundError } from '../errors/index.js';
+import { ApiError, OfferNotFoundError, OfferNotFoundForPlayerError } from '../errors/index.js';
 import { getEnvironment } from '../config/env.js';
-import { getCachedOfferData, setCachedOfferData } from '../cache/index.js';
+import { getCachedOfferData, setCachedOfferDataBatch } from '../cache/index.js';
 
 /**
  * Options for fetching offer data.
@@ -12,7 +12,48 @@ export interface FetchOptions {
 }
 
 /**
- * Fetches offer data from OddsShopper API with caching support.
+ * Fetches offer data for a specific player from OddsShopper API with caching support.
+ * Checks cache first for the specific player, then fetches from API if needed.
+ *
+ * @param offerId - The offer ID to fetch data for
+ * @param playerId - The player ID to fetch offer for
+ * @param options - Fetch options including cache bypass
+ * @returns Result containing single Offer or an error
+ */
+export async function fetchOddsShopperDataForPlayer(
+    offerId: string,
+    playerId: string,
+    options: FetchOptions = {}
+): Promise<Result<Offer, ApiError | OfferNotFoundError | OfferNotFoundForPlayerError>> {
+    // Check cache first for this specific player (unless bypassed)
+    if (!options.skipCache) {
+        const cached = await getCachedOfferData(offerId, playerId);
+        if (cached) {
+            return { success: true, value: cached };
+        }
+    }
+
+    // Fetch all offers from API
+    const result = await fetchFromAPI(offerId);
+
+    // Cache all offers individually if successful
+    if (result.success) {
+        await setCachedOfferDataBatch(offerId, result.value);
+
+        // Find and return the specific player's offer
+        const playerOffer = result.value.find(o => o.participants[0]?.id === playerId);
+        if (!playerOffer) {
+            return { success: false, error: new OfferNotFoundForPlayerError(playerId) };
+        }
+        return { success: true, value: playerOffer };
+    }
+
+    return result;
+}
+
+/**
+ * Fetches all offers for an offerId from OddsShopper API.
+ * Used by batch processing - always fetches from API and caches all results.
  *
  * @param offerId - The offer ID to fetch data for
  * @param options - Fetch options including cache bypass
@@ -22,20 +63,12 @@ export async function fetchOddsShopperData(
     offerId: string,
     options: FetchOptions = {}
 ): Promise<Result<Offer[], ApiError | OfferNotFoundError>> {
-    // Check cache first (unless bypassed)
-    if (!options.skipCache) {
-        const cached = await getCachedOfferData(offerId);
-        if (cached) {
-            return { success: true, value: cached };
-        }
-    }
-
     // Fetch from API
     const result = await fetchFromAPI(offerId);
 
-    // Store in cache if successful (handles invalidation internally)
-    if (result.success) {
-        await setCachedOfferData(offerId, result.value);
+    // Store each offer in cache if successful
+    if (result.success && !options.skipCache) {
+        await setCachedOfferDataBatch(offerId, result.value);
     }
 
     return result;

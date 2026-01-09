@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { americanToDecimal, americanToProbability, calculateEVPercentage } from "../src/utils/odds";
+import { americanToDecimal, americanToProbability, calculateEVPercentage, calculateKellyFraction } from "../../src/utils/odds";
 
 describe("americanToDecimal", () => {
     it("converts positive American odds correctly", () => {
@@ -113,5 +113,64 @@ describe("calculateEVPercentage", () => {
         // Any probability at 1.0 odds results in negative EV
         expect(calculateEVPercentage(0.5, 1.0)).toBe(-50);
         expect(calculateEVPercentage(1.0, 1.0)).toBe(0);
+    });
+});
+
+describe("calculateKellyFraction", () => {
+    it("returns 0 for negative EV bet", () => {
+        // 40% probability at 2.0 odds (50% implied) - negative EV
+        // b = 1, p = 0.4, q = 0.6
+        // f* = (1 * 0.4 - 0.6) / 1 = -0.2 -> clamped to 0
+        const result = calculateKellyFraction(0.4, 2.0);
+        expect(result).toBe(0);
+    });
+
+    it("returns 0 for break-even bet", () => {
+        // 50% probability at 2.0 odds - zero EV
+        // b = 1, p = 0.5, q = 0.5
+        // f* = (1 * 0.5 - 0.5) / 1 = 0
+        const result = calculateKellyFraction(0.5, 2.0);
+        expect(result).toBe(0);
+    });
+
+    it("returns positive fraction for positive EV bet", () => {
+        // 60% probability at 2.0 odds
+        // b = 1, p = 0.6, q = 0.4
+        // f* = (1 * 0.6 - 0.4) / 1 = 0.2
+        const result = calculateKellyFraction(0.6, 2.0);
+        expect(result).toBeCloseTo(0.2, 5);
+    });
+
+    it("handles realistic betting scenario at -110 odds", () => {
+        // 55% probability at -110 odds (1.909 decimal)
+        // b = 0.909, p = 0.55, q = 0.45
+        // f* = (0.909 * 0.55 - 0.45) / 0.909 = 0.055
+        const decimalOdds = americanToDecimal(-110);
+        const result = calculateKellyFraction(0.55, decimalOdds);
+        expect(result).toBeCloseTo(0.055, 2);
+    });
+
+    it("handles long shot with value", () => {
+        // 15% probability at +900 odds (10.0 decimal)
+        // b = 9, p = 0.15, q = 0.85
+        // f* = (9 * 0.15 - 0.85) / 9 = 0.056
+        const result = calculateKellyFraction(0.15, 10.0);
+        expect(result).toBeCloseTo(0.056, 2);
+    });
+
+    it("handles heavy favorite with small edge", () => {
+        // 95% probability at -2000 odds (1.05 decimal)
+        // b = 0.05, p = 0.95, q = 0.05
+        // f* = (0.05 * 0.95 - 0.05) / 0.05 = 0
+        const decimalOdds = americanToDecimal(-2000);
+        const result = calculateKellyFraction(0.95, decimalOdds);
+        expect(result).toBe(0);
+    });
+
+    it("suggests full bankroll for guaranteed winner", () => {
+        // 100% probability at any odds
+        // f* = (b * 1 - 0) / b = 1
+        const result = calculateKellyFraction(1.0, 2.0);
+        expect(result).toBe(1);
     });
 });

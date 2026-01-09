@@ -1,4 +1,4 @@
-import type { Offer, Outcome, Side, Participant } from '../src/types';
+import type { Offer, Outcome, Side, Participant } from '../../src/types';
 
 /**
  * Test suite to validate assumptions made about data.json
@@ -12,7 +12,7 @@ describe('Data Assumptions Validation', () => {
   beforeAll(async () => {
     // Import data.json - test the import assumption
     try {
-      dataImport = await import('../src/data/data.json');
+      dataImport = await import('../../src/data/data.json');
       offers = Array.isArray(dataImport.default) ? dataImport.default : Array.isArray(dataImport) ? dataImport : [dataImport];
     } catch (error) {
       throw new Error(`Failed to import data.json: ${error}`);

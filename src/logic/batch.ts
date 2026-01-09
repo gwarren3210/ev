@@ -82,6 +82,7 @@ export async function calculateEVBatch(
             targetBook: item.targetBook,
             sharps: item.sharps,
             devigMethod: item.devigMethod,
+            bankroll: item.bankroll,
         };
 
         // Check EV cache first

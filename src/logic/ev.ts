@@ -15,8 +15,8 @@ import {
     DevigError
 } from '../errors/index.js';
 import { devigOdds } from './devig.js';
-import { americanToDecimal, calculateEVPercentage } from '../utils/odds.js';
-import { fetchOddsShopperData, type FetchOptions } from '../services/oddsshopper.js';
+import { americanToDecimal, calculateEVPercentage, calculateKellyFraction } from '../utils/odds.js';
+import { fetchOddsShopperDataForPlayer, type FetchOptions } from '../services/oddsshopper.js';
 import { getCachedEVResult, setCachedEVResult } from '../cache/index.js';
 
 // Re-export FetchOptions for consumers
@@ -47,21 +47,14 @@ export async function calculateEV(
         }
     }
 
-    // 1. Fetch Market Data (with caching)
-    const dataFetchResult = await fetchOddsShopperData(req.offerId, options);
-    if (dataFetchResult.success === false) {
-        return { success: false, error: dataFetchResult.error };
-    }
-    const allOffers = dataFetchResult.value;
-
-    // 2. Identify Targeted Offer
-    const offerResult = findSpecificOffer(allOffers, req.playerId);
+    // 1. Fetch Offer for Player (with per-player caching)
+    const offerResult = await fetchOddsShopperDataForPlayer(req.offerId, req.playerId, options);
     if (offerResult.success === false) {
         return { success: false, error: offerResult.error };
     }
     const offer = offerResult.value;
 
-    // 3. Calculate EV from offer
+    // 2. Calculate EV from offer
     const result = calculateEVFromOffer(offer, req);
 
     // Cache successful result
@@ -111,6 +104,13 @@ export function calculateEVFromOffer(
     }
     const targetAmericanOdds = targetAmericanOddsResult.value;
 
+    // Find best available odds across all books
+    const bestOddsResult = findBestOddsAcrossBooks(allOutcomes, req.line, req.side);
+    if (bestOddsResult.success === false) {
+        return { success: false, error: bestOddsResult.error };
+    }
+    const bestAvailableOdds = bestOddsResult.value;
+
     // 3. Calculate Probabilities
     const devigMethod = req.devigMethod;
 
@@ -136,20 +136,40 @@ export function calculateEVFromOffer(
     const player = offer.participants.find(p => p.id === req.playerId)?.name || 'Unknown Player';
     const sharpsUsed = sharpBookCodes;
 
+    // Build base response
+    const response: CalculateEVResponse = {
+        player,
+        market: offer.offerName,
+        line: req.line,
+        side: req.side,
+        targetBook: req.targetBook,
+        targetOdds: targetAmericanOdds,
+        trueProbability,
+        impliedProbability,
+        expectedValue,
+        sharpsUsed,
+        bestAvailableOdds,
+    };
+
+    // Add Kelly sizing if bankroll is provided
+    if (req.bankroll !== undefined && req.bankroll > 0) {
+        const full = calculateKellyFraction(trueProbability, targetDecimalOdds);
+        const quarter = full * 0.25;
+        const recommendedBet = req.bankroll * quarter;
+        const expectedProfit = recommendedBet * (expectedValue / 100);
+
+        response.kelly = {
+            full,
+            quarter,
+            recommendedBet,
+            expectedProfit,
+            bankroll: req.bankroll,
+        };
+    }
+
     return {
         success: true,
-        value: {
-            player,
-            market: offer.offerName,
-            line: req.line,
-            side: req.side,
-            targetBook: req.targetBook,
-            targetOdds: targetAmericanOdds,
-            trueProbability,
-            impliedProbability,
-            expectedValue,
-            sharpsUsed,
-        },
+        value: response,
     };
 }
 
@@ -222,6 +242,35 @@ export function extractAmericanOdds(outcomes: Outcome[], side: 'Over' | 'Under')
         return { success: false, error: new CalculationError(`Invalid American odds: ${outcome.americanOdds}`, 'INVALID_ODDS') };
     }
     return { success: true, value: odds };
+}
+
+/**
+ * Finds the best available odds across all sportsbooks for a given line and side.
+ * "Best" = highest American odds (less negative or more positive = better payout).
+ */
+export function findBestOddsAcrossBooks(
+    outcomes: Outcome[],
+    line: number,
+    side: 'Over' | 'Under'
+): Result<{ sportsbookCode: string; americanOdds: number }, CalculationError> {
+    const matching = outcomes
+        .filter(o => parseFloat(o.line) === line && o.label === side)
+        .map(o => ({ ...o, parsedOdds: parseInt(o.americanOdds) }))
+        .filter(o => !isNaN(o.parsedOdds));
+
+    if (matching.length === 0) {
+        return {
+            success: false,
+            error: new CalculationError(`No outcomes found for line ${line} ${side}`, 'NO_MATCHING_OUTCOMES')
+        };
+    }
+
+    const best = matching.reduce((a, b) => a.parsedOdds > b.parsedOdds ? a : b);
+
+    return {
+        success: true,
+        value: { sportsbookCode: best.sportsbookCode, americanOdds: best.parsedOdds }
+    };
 }
 
 /**

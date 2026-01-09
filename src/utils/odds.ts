@@ -41,3 +41,28 @@ export function americanToProbability(american: number): number {
 export function calculateEVPercentage(trueProb: number, decimalOdds: number): number {
     return (trueProb * decimalOdds - 1) * 100;
 }
+
+/**
+ * Calculates the Kelly Criterion fraction for optimal bet sizing.
+ *
+ * Formula: f* = (bp - q) / b
+ * Where:
+ *   b = decimal odds - 1 (net profit per unit)
+ *   p = true probability of winning
+ *   q = 1 - p (probability of losing)
+ *
+ * @param trueProbability - The estimated true probability of the outcome (0-1).
+ * @param decimalOdds - The decimal odds offered by the bookmaker.
+ * @returns The Kelly fraction (0-1), clamped to 0 for negative EV bets.
+ */
+export function calculateKellyFraction(trueProbability: number, decimalOdds: number): number {
+    const b = decimalOdds - 1; // net profit per unit
+    const p = trueProbability;
+    const q = 1 - p;
+
+    // Kelly formula: f* = (bp - q) / b
+    const kellyFraction = (b * p - q) / b;
+
+    // Clamp to 0 for negative EV (never bet negative amounts)
+    return Math.max(0, kellyFraction);
+}

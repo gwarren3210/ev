@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { devigOdds } from "../src/logic/devig";
-import type { Outcome } from "../src/types";
+import { devigOdds } from "../../src/logic/devig";
+import type { Outcome } from "../../src/types";
 
 function createOutcome(overrides: Partial<Outcome> = {}): Outcome {
     return {
@@ -42,12 +42,12 @@ describe("devigOdds Strategies", () => {
     it("calculates OS Skewed correctly", () => {
         // Vig = 0.10.
         // Over: 0.55 - (0.65 * 0.10) = 0.55 - 0.065 = 0.485
-        const result = devigOdds(outcomes, "Over", "os_skewed");
+        const result = devigOdds(outcomes, "Over", "osskeweded");
         expect(result.success).toBe(true);
         if (result.success) expect(result.value).toBeCloseTo(0.485);
 
         // Under: 0.55 - (0.35 * 0.10) = 0.55 - 0.035 = 0.515
-        const resultUnder = devigOdds(outcomes, "Under", "os_skewed");
+        const resultUnder = devigOdds(outcomes, "Under", "osskeweded");
         expect(resultUnder.success).toBe(true);
         if (resultUnder.success) expect(resultUnder.value).toBeCloseTo(0.515);
     });
@@ -67,7 +67,7 @@ describe("devigOdds Strategies", () => {
             // Over: 0.6 - 0.065 = 0.535
             // Under: 0.5 - 0.035 = 0.465
         ];
-        const result = devigOdds(skewedOutcomes, "Over", "os_skewed");
+        const result = devigOdds(skewedOutcomes, "Over", "osskeweded");
         if (result.success) expect(result.value).toBeCloseTo(0.535);
     });
 });

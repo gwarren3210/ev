@@ -130,7 +130,7 @@ export type Data = Offer[];
 export const DataSchema = z.array(OfferSchema);
 
 // Request body type
-export type DevigMethod = 'multiplicative' | 'additive' | 'power' | 'shin' | 'os_skewed';
+export type DevigMethod = 'multiplicative' | 'additive' | 'power' | 'shin' | 'osskeweded';
 
 export interface CalculateEVRequest {
     offerId: string;
@@ -140,6 +140,24 @@ export interface CalculateEVRequest {
     line: number;
     side: 'Over' | 'Under';
     devigMethod: DevigMethod;
+    bankroll?: number;
+}
+
+/**
+ * Kelly Criterion bet sizing output.
+ * Only included in response when bankroll is provided.
+ */
+export interface KellyBetSizing {
+    /** Full Kelly fraction (what percentage of bankroll to bet) */
+    full: number;
+    /** Quarter Kelly fraction (conservative 0.25x Kelly) */
+    quarter: number;
+    /** Recommended bet amount in the same units as bankroll */
+    recommendedBet: number;
+    /** Expected profit based on EV and recommended bet */
+    expectedProfit: number;
+    /** The bankroll value used for calculation */
+    bankroll: number;
 }
 
 // Response type
@@ -154,6 +172,11 @@ export interface CalculateEVResponse {
     impliedProbability: number;
     expectedValue: number;
     sharpsUsed: string[];
+    bestAvailableOdds: {
+        sportsbookCode: string;
+        americanOdds: number;
+    };
+    kelly?: KellyBetSizing;
 }
 
 // Result type for error handling
@@ -176,6 +199,7 @@ export interface BatchEVItem {
     targetBook: string;
     sharps: string[];
     devigMethod: DevigMethod;
+    bankroll?: number;
 }
 
 /**

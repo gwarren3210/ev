@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { fetchOddsShopperData } from "../src/services/oddsshopper";
-import type { Offer } from "../src/types/index";
-import { ApiError, OfferNotFoundError } from "../src/errors/index";
-import { resetRedisState } from "../src/cache/redis";
+import { fetchOddsShopperData } from "../../src/services/oddsshopper";
+import type { Offer } from "../../src/types/index";
+import { ApiError, OfferNotFoundError } from "../../src/errors/index";
+import { resetRedisState } from "../../src/cache/redis";
 
 // Mock offer data
 const mockOffer: Offer = {

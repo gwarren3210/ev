@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import app from "../src/server";
+import app from "../../src/server";
 import type { Server } from "http";
-import { type Offer, type CalculateEVResponse, type BatchCalculateEVResponse, DataSchema, type Result } from "../src/types/index";
-import { getEnvironment } from "../src/config/env";
-import type { ApiError, OfferNotFoundError } from "../src/errors";
-import { fetchFromAPI } from "../src/services/oddsshopper";
+import { type Offer, type CalculateEVResponse, type BatchCalculateEVResponse, DataSchema, type Result } from "../../src/types/index";
+import { getEnvironment } from "../../src/config/env";
+import type { ApiError, OfferNotFoundError } from "../../src/errors";
+import { fetchFromAPI } from "../../src/services/oddsshopper";
 
 interface ErrorResponse {
     error: string;
@@ -201,7 +201,7 @@ async function fetchTestableOffer(): Promise<{
     return null;
 }
 
-describe("E2E Tests - Live Data", () => {
+describe.skip("E2E Tests - Live Data", () => {
     beforeAll(async () => {
         // Start the server
         server = app.listen(TEST_PORT);

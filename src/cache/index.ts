@@ -11,20 +11,21 @@ const API_HASH_PREFIX = 'oddsshopper:hash:';
 const EV_CACHE_PREFIX = 'ev:calc:';
 
 // ============================================
-// Layer 1: OddsShopper API Response Cache
+// Layer 1: OddsShopper API Response Cache (Per-Player)
 // ============================================
 
 /**
- * Gets cached offer data for a given offerId.
+ * Gets cached offer data for a specific offerId and playerId.
  */
-export async function getCachedOfferData(offerId: string): Promise<Offer[] | null> {
+export async function getCachedOfferData(offerId: string, playerId: string): Promise<Offer | null> {
     const client = await getRedisClient();
     if (!client) return null;
 
     try {
-        const cached = await client.get(`${API_CACHE_PREFIX}${offerId}`);
+        const key = `${API_CACHE_PREFIX}${offerId}:${playerId}`;
+        const cached = await client.get(key);
         if (cached) {
-            return JSON.parse(cached) as Offer[];
+            return JSON.parse(cached) as Offer;
         }
     } catch (err) {
         console.error('Redis get error (offer):', err);
@@ -33,32 +34,47 @@ export async function getCachedOfferData(offerId: string): Promise<Offer[] | nul
 }
 
 /**
- * Stores offer data in cache with invalidation check.
- * If the data has changed, invalidates all dependent EV cache entries.
+ * Stores a single offer in cache with invalidation check.
+ * If the data has changed, invalidates dependent EV cache entries.
  */
-export async function setCachedOfferData(offerId: string, data: Offer[]): Promise<void> {
+export async function setCachedOfferData(offerId: string, playerId: string, data: Offer): Promise<void> {
     const client = await getRedisClient();
     if (!client) return;
 
     try {
         const env = getEnvironment();
         const ttl = env.REDIS_API_CACHE_TTL;
+        const cacheKey = `${API_CACHE_PREFIX}${offerId}:${playerId}`;
+        const hashKey = `${API_HASH_PREFIX}${offerId}:${playerId}`;
 
         const newHash = generateOfferHash(data);
-        const oldHash = await client.get(`${API_HASH_PREFIX}${offerId}`);
+        const oldHash = await client.get(hashKey);
 
-        // If hash changed, invalidate all EV results for this offer
+        // If hash changed, invalidate EV results for this offer/player
         if (oldHash && oldHash !== newHash) {
-            await invalidateEVCacheForOffer(offerId);
+            await invalidateEVCacheForOffer(offerId, playerId);
         }
 
         // Store new data and hash
-        await client.set(`${API_CACHE_PREFIX}${offerId}`, JSON.stringify(data));
-        await client.expire(`${API_CACHE_PREFIX}${offerId}`, ttl);
-        await client.set(`${API_HASH_PREFIX}${offerId}`, newHash);
-        await client.expire(`${API_HASH_PREFIX}${offerId}`, ttl);
+        await client.set(cacheKey, JSON.stringify(data));
+        await client.expire(cacheKey, ttl);
+        await client.set(hashKey, newHash);
+        await client.expire(hashKey, ttl);
     } catch (err) {
         console.error('Redis set error (offer):', err);
+    }
+}
+
+/**
+ * Caches all offers from an API response, keyed by offerId:playerId.
+ * Used after fetching from API to cache each player's offer individually.
+ */
+export async function setCachedOfferDataBatch(offerId: string, offers: Offer[]): Promise<void> {
+    for (const offer of offers) {
+        const playerId = offer.participants[0]?.id;
+        if (playerId) {
+            await setCachedOfferData(offerId, playerId, offer);
+        }
     }
 }
 
@@ -128,20 +144,20 @@ export async function setCachedEVResult(req: CalculateEVRequest, result: Calcula
  * Generates a hash of offer data for change detection.
  * Uses a simple hash of the stringified data.
  */
-export function generateOfferHash(data: Offer[]): string {
+export function generateOfferHash(data: Offer): string {
     const str = JSON.stringify(data);
     return Bun.hash(str).toString(16);
 }
 
 /**
- * Invalidates all EV cache entries for a given offerId.
+ * Invalidates EV cache entries for a specific offerId and playerId.
  * Uses Redis SCAN to find and delete matching keys.
  */
-export async function invalidateEVCacheForOffer(offerId: string): Promise<number> {
+export async function invalidateEVCacheForOffer(offerId: string, playerId: string): Promise<number> {
     const client = await getRedisClient();
     if (!client) return 0;
 
-    const pattern = `${EV_CACHE_PREFIX}${offerId}:*`;
+    const pattern = `${EV_CACHE_PREFIX}${offerId}:${playerId}:*`;
     let deletedCount = 0;
 
     try {
@@ -164,7 +180,7 @@ export async function invalidateEVCacheForOffer(offerId: string): Promise<number
         } while (String(cursor) !== '0');
 
         if (deletedCount > 0) {
-            console.log(`Invalidated ${deletedCount} EV cache entries for offer ${offerId}`);
+            console.log(`Invalidated ${deletedCount} EV cache entries for offer ${offerId}, player ${playerId}`);
         }
     } catch (err) {
         console.error('Redis invalidation error:', err);

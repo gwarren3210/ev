@@ -9,7 +9,7 @@ const envSchema = z.object({
     ODDSSHOPPER_API_URL: z.string().regex(/^https?:\/\/.+/),
     REDIS_URL: z.string().url().optional(),
     REDIS_API_CACHE_TTL: z.coerce.number().default(60),
-    REDIS_EV_CACHE_TTL: z.coerce.number().default(60),
+    REDIS_EV_CACHE_TTL: z.coerce.number().default(300),
 });
 
 export type Environment = z.infer<typeof envSchema>;

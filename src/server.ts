@@ -1,7 +1,14 @@
 import express, { type Request, type Response } from 'express';
 import { z } from 'zod';
+import swaggerUi from 'swagger-ui-express';
+import yaml from 'js-yaml';
 import { calculateEV } from './logic/ev.js';
 import { calculateEVBatch } from './logic/batch.js';
+
+// Load OpenAPI specification
+const openApiSpec = yaml.load(
+    await Bun.file('./openapi.yaml').text()
+) as swaggerUi.JsonObject;
 
 const app = express();
 
@@ -24,7 +31,8 @@ const calculateEVRequestSchema = z.object({
     playerId: z.string(),
     line: z.number(),
     side: z.enum(['Over', 'Under']),
-    devigMethod: z.enum(['multiplicative', 'additive', 'power', 'shin', 'os_skewed']),
+    devigMethod: z.enum(['multiplicative', 'additive', 'power', 'shin', 'osskeweded']),
+    bankroll: z.number().positive().optional(),
 });
 
 app.post('/calculate-ev', async (req: Request, res: Response) => {
@@ -62,7 +70,8 @@ const batchItemSchema = z.object({
     side: z.enum(['Over', 'Under']),
     targetBook: z.string(),
     sharps: z.array(z.string()).min(1),
-    devigMethod: z.enum(['multiplicative', 'additive', 'power', 'shin', 'os_skewed']),
+    devigMethod: z.enum(['multiplicative', 'additive', 'power', 'shin', 'osskeweded']),
+    bankroll: z.number().positive().optional(),
 });
 
 const batchCalculateEVRequestSchema = z.object({
@@ -94,6 +103,15 @@ app.post('/calculate-ev/batch', async (req: Request, res: Response) => {
 
 app.get("/test", (req: Request, res: Response) => {
     res.send("test");
+});
+
+// Swagger UI documentation at root
+app.use('/', swaggerUi.serve);
+app.get('/', swaggerUi.setup(openApiSpec));
+
+// Catch-all: redirect unspecified routes to root
+app.use('/{*splat}', (req: Request, res: Response) => {
+    res.redirect('/');
 });
 
 export default app;

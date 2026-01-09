@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
-import { validateEnvironment, getEnvironment } from "../src/config/env";
+import { validateEnvironment, getEnvironment } from "../../src/config/env";
 
 describe("validateEnvironment", () => {
     const originalEnv = { ...process.env };
@@ -120,7 +120,7 @@ describe("validateEnvironment", () => {
         delete process.env.REDIS_EV_CACHE_TTL;
 
         const result = validateEnvironment();
-        expect(result.REDIS_EV_CACHE_TTL).toBe(60);
+        expect(result.REDIS_EV_CACHE_TTL).toBe(300);
     });
 
     it("coerces REDIS_EV_CACHE_TTL to number", () => {
