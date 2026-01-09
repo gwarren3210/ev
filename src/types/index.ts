@@ -130,7 +130,7 @@ export type Data = Offer[];
 export const DataSchema = z.array(OfferSchema);
 
 // Request body type
-export type DevigMethod = 'multiplicative' | 'additive' | 'power' | 'shin' | 'os_skewed';
+export type DevigMethod = 'multiplicative' | 'additive' | 'power' | 'shin' | 'osskeweded';
 
 export interface CalculateEVRequest {
     offerId: string;
@@ -140,6 +140,24 @@ export interface CalculateEVRequest {
     line: number;
     side: 'Over' | 'Under';
     devigMethod: DevigMethod;
+    bankroll?: number;
+}
+
+/**
+ * Kelly Criterion bet sizing output.
+ * Only included in response when bankroll is provided.
+ */
+export interface KellyBetSizing {
+    /** Full Kelly fraction (what percentage of bankroll to bet) */
+    full: number;
+    /** Quarter Kelly fraction (conservative 0.25x Kelly) */
+    quarter: number;
+    /** Recommended bet amount in the same units as bankroll */
+    recommendedBet: number;
+    /** Expected profit based on EV and recommended bet */
+    expectedProfit: number;
+    /** The bankroll value used for calculation */
+    bankroll: number;
 }
 
 // Response type
@@ -154,9 +172,59 @@ export interface CalculateEVResponse {
     impliedProbability: number;
     expectedValue: number;
     sharpsUsed: string[];
+    bestAvailableOdds: {
+        sportsbookCode: string;
+        americanOdds: number;
+    };
+    kelly?: KellyBetSizing;
 }
 
 // Result type for error handling
 export type Result<T, E extends Error = Error> =
     | { success: true; value: T }
     | { success: false; error: E };
+
+// ============================================
+// Batch Processing Types
+// ============================================
+
+/**
+ * A single item in a batch EV calculation request.
+ * Note: offerId is shared across all items in the batch.
+ */
+export interface BatchEVItem {
+    playerId: string;
+    line: number;
+    side: 'Over' | 'Under';
+    targetBook: string;
+    sharps: string[];
+    devigMethod: DevigMethod;
+    bankroll?: number;
+}
+
+/**
+ * Request body for batch EV calculation.
+ * All items must share the same offerId.
+ */
+export interface BatchCalculateEVRequest {
+    offerId: string;
+    items: BatchEVItem[];
+}
+
+/**
+ * Result for a single item in a batch response.
+ */
+export type BatchItemResult =
+    | { index: number; success: true; result: CalculateEVResponse }
+    | { index: number; success: false; error: { code: string; message: string } };
+
+/**
+ * Response body for batch EV calculation.
+ */
+export interface BatchCalculateEVResponse {
+    offerId: string;
+    totalItems: number;
+    successCount: number;
+    errorCount: number;
+    results: BatchItemResult[];
+}

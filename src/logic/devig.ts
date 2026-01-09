@@ -41,7 +41,7 @@ export function devigOdds(
         case 'power':
             deviggedProb = devigPower(p1, p2);
             break;
-        case 'os_skewed':
+        case 'osskeweded':
             deviggedProb = devigOsSkewed(p1, p2, label);
             break;
         case 'shin':

@@ -6,50 +6,84 @@ import type {
     Result,
     DevigMethod,
 } from '../types/index.js';
-import { DataSchema } from '../types/index.js';
 import {
     CalculationError,
-    OfferNotFoundError,
-    ApiError,
-    OneSidedMarketError,
+    OfferNotFoundForPlayerError,
     NoSharpOutcomesError,
     TargetOutcomeNotFoundError,
     TargetOutcomeNotCompleteError,
     DevigError
 } from '../errors/index.js';
 import { devigOdds } from './devig.js';
-import { americanToDecimal, calculateEVPercentage } from '../utils/odds.js';
-import { getEnvironment } from '../config/env.js';
+import { americanToDecimal, calculateEVPercentage, calculateKellyFraction } from '../utils/odds.js';
+import { fetchOddsShopperDataForPlayer, type FetchOptions } from '../services/oddsshopper.js';
+import { getCachedEVResult, setCachedEVResult } from '../cache/index.js';
+
+// Re-export FetchOptions for consumers
+export type { FetchOptions } from '../services/oddsshopper.js';
 /**
  * Orchestrates the calculation of Expected Value (EV) for a given bet.
- * 
+ *
  * Process:
- * 1. Fetches live market data for the specified offer.
- * 2. Identifies the targeted player offer.
- * 3. Identifies sharp books available for benchmarking.
- * 4. Extracts market data for the target book and side.
- * 5. Calculates true and implied probabilities.
- * 6. Calculates the final Expected Value (EV).
- * 
+ * 1. Checks EV cache for existing result
+ * 2. Fetches live market data for the specified offer (with caching)
+ * 3. Identifies the targeted player offer
+ * 4. Calculates EV using calculateEVFromOffer
+ * 5. Caches the result
+ *
  * @param req - The request parameters including offerId, targetBook, and side.
+ * @param options - Fetch options including cache bypass.
  * @returns A Result containing the detailed EV analysis or a specific error.
  */
-export async function calculateEV(req: CalculateEVRequest): Promise<Result<CalculateEVResponse, CalculationError>> {
-    // 1. Fetch Market Data
-    const dataFetchResult = await fetchOfferData(req.offerId);
-    if (dataFetchResult.success === false) {
-        return { success: false, error: dataFetchResult.error };
+export async function calculateEV(
+    req: CalculateEVRequest,
+    options: FetchOptions = {}
+): Promise<Result<CalculateEVResponse, CalculationError>> {
+    // Check EV cache first
+    if (!options.skipCache) {
+        const cached = await getCachedEVResult(req);
+        if (cached) {
+            return { success: true, value: cached };
+        }
     }
-    const allOffers = dataFetchResult.value;
 
-    // 2. Identify Targeted Offer
-    const offerResult = findSpecificOffer(allOffers, req.playerId);
+    // 1. Fetch Offer for Player (with per-player caching)
+    const offerResult = await fetchOddsShopperDataForPlayer(req.offerId, req.playerId, options);
     if (offerResult.success === false) {
         return { success: false, error: offerResult.error };
     }
     const offer = offerResult.value;
 
-    // 3. Identify Sharp Books for Benchmark
+    // 2. Calculate EV from offer
+    const result = calculateEVFromOffer(offer, req);
+
+    // Cache successful result
+    if (result.success) {
+        await setCachedEVResult(req, result.value);
+    }
+
+    return result;
+}
+
+/**
+ * Calculates EV from a pre-fetched Offer object.
+ * Used by batch processing to avoid redundant API calls.
+ *
+ * Process:
+ * 1. Identifies sharp books available for benchmarking
+ * 2. Extracts market data for the target book and side
+ * 3. Calculates true and implied probabilities
+ * 4. Calculates the final Expected Value (EV)
+ *
+ * @param offer - The pre-fetched Offer object for the player
+ * @param req - The request parameters (without offerId since offer is provided)
+ * @returns A Result containing the detailed EV analysis or a specific error
+ */
+export function calculateEVFromOffer(
+    offer: Offer,
+    req: Omit<CalculateEVRequest, 'offerId'> & { playerId: string }
+): Result<CalculateEVResponse, CalculationError> {
+    // 1. Identify Sharp Books for Benchmark
     const allOutcomes = offer.sides.flatMap(side => side.outcomes);
     const sharpBooksResult = findAvailableSharpBooks(allOutcomes, req.sharps);
     if (sharpBooksResult.success === false) {
@@ -57,8 +91,8 @@ export async function calculateEV(req: CalculateEVRequest): Promise<Result<Calcu
     }
     const sharpBookCodes = sharpBooksResult.value;
 
-    // 4. Extract Target Market Data
-    const targetOutcomesResult = findTargetOutcomes(allOutcomes, req.targetBook);
+    // 2. Extract Target Market Data (filtered by line)
+    const targetOutcomesResult = findTargetOutcomes(allOutcomes, req.targetBook, req.line);
     if (targetOutcomesResult.success === false) {
         return { success: false, error: targetOutcomesResult.error };
     }
@@ -68,12 +102,16 @@ export async function calculateEV(req: CalculateEVRequest): Promise<Result<Calcu
     if (targetAmericanOddsResult.success === false) {
         return { success: false, error: targetAmericanOddsResult.error };
     }
-    if (targetAmericanOddsResult.value !== req.line) {
-        return { success: false, error: new CalculationError(`Target odds ${targetAmericanOddsResult.value} does not match request line ${req.line}`, 'TARGET_ODDS_DOES_NOT_MATCH_REQUEST') };
-    }
     const targetAmericanOdds = targetAmericanOddsResult.value;
 
-    // 5. Calculate Probabilities
+    // Find best available odds across all books
+    const bestOddsResult = findBestOddsAcrossBooks(allOutcomes, req.line, req.side);
+    if (bestOddsResult.success === false) {
+        return { success: false, error: bestOddsResult.error };
+    }
+    const bestAvailableOdds = bestOddsResult.value;
+
+    // 3. Calculate Probabilities
     const devigMethod = req.devigMethod;
 
     // Calculate True Probability by aggregating devigged odds from sharp books
@@ -91,69 +129,57 @@ export async function calculateEV(req: CalculateEVRequest): Promise<Result<Calcu
     }
     const impliedProbability = impliedProbResult.value;
 
-    // 6. Calculate Final EV
+    // 4. Calculate Final EV
     const targetDecimalOdds = americanToDecimal(targetAmericanOdds);
     const expectedValue = calculateEVPercentage(trueProbability, targetDecimalOdds);
 
     const player = offer.participants.find(p => p.id === req.playerId)?.name || 'Unknown Player';
-    // Note, fix to have this be returned by calculateAverageTrueProbability
     const sharpsUsed = sharpBookCodes;
-    return {
-        success: true,
-        value: {
-            player,
-            market: offer.offerName,
-            line: req.line,
-            side: req.side,
-            targetBook: req.targetBook,
-            targetOdds: targetAmericanOdds,
-            trueProbability,
-            impliedProbability,
-            expectedValue,
-            sharpsUsed,
-        },
+
+    // Build base response
+    const response: CalculateEVResponse = {
+        player,
+        market: offer.offerName,
+        line: req.line,
+        side: req.side,
+        targetBook: req.targetBook,
+        targetOdds: targetAmericanOdds,
+        trueProbability,
+        impliedProbability,
+        expectedValue,
+        sharpsUsed,
+        bestAvailableOdds,
     };
-}
 
-/**
- * Fetches outcomes for a specific offer ID from the OddsShopper API.
- */
-async function fetchOfferData(offerId: string): Promise<Result<Offer[], ApiError | OfferNotFoundError>> {
-    try {
-        const env = getEnvironment();
-        const startDate = new Date().toISOString();
-        const params = new URLSearchParams({ startDate, sortBy: 'Time' });
-        const url = `${env.ODDSSHOPPER_API_URL}/api/offers/${offerId}/outcomes/live?${params.toString()}`;
+    // Add Kelly sizing if bankroll is provided
+    if (req.bankroll !== undefined && req.bankroll > 0) {
+        const full = calculateKellyFraction(trueProbability, targetDecimalOdds);
+        const quarter = full * 0.25;
+        const recommendedBet = req.bankroll * quarter;
+        const expectedProfit = recommendedBet * (expectedValue / 100);
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            if (response.status === 404) return { success: false, error: new OfferNotFoundError(offerId) };
-            return { success: false, error: new ApiError(`Upstream error: ${response.statusText}`, response.status) };
-        }
-
-        const offers = await response.json();
-        if (!Array.isArray(offers)) return { success: false, error: new OfferNotFoundError(offerId) };
-        const offersResult = DataSchema.safeParse(offers);
-        if (!offersResult.success) {
-            return { success: false, error: new ApiError(`Upstream error: ${offersResult.error.message}`, response.status) };
-        }
-
-        return { success: true, value: offers };
-    } catch (err) {
-        return {
-            success: false,
-            error: new ApiError(`Network or parsing failure: ${err instanceof Error ? err.message : 'Unknown'}`)
+        response.kelly = {
+            full,
+            quarter,
+            recommendedBet,
+            expectedProfit,
+            bankroll: req.bankroll,
         };
     }
+
+    return {
+        success: true,
+        value: response,
+    };
 }
 
 /**
  * Finds the specific offer corresponding to a player ID.
  * Note: Assumes that the one participant exists and is the player.
  */
-export function findSpecificOffer(offers: Offer[], playerId: string): Result<Offer, OfferNotFoundError> {
+export function findSpecificOffer(offers: Offer[], playerId: string): Result<Offer, OfferNotFoundForPlayerError> {
     const offer = offers.find(o => o.participants[0]?.id === playerId);
-    if (!offer) return { success: false, error: new OfferNotFoundError(playerId) };
+    if (!offer) return { success: false, error: new OfferNotFoundForPlayerError(playerId) };
     return { success: true, value: offer };
 }
 
@@ -184,11 +210,17 @@ export function findAvailableSharpBooks(allOutcomes: Outcome[], sharps: string[]
 }
 
 /**
- * Extracts all outcomes associated with the target sportsbook.
+ * Extracts all outcomes associated with the target sportsbook at the specified line.
  * Note: currently only supports 2 outcomes per side
  */
-export function findTargetOutcomes(outcomes: Outcome[], targetBook: string): Result<Outcome[], TargetOutcomeNotFoundError | TargetOutcomeNotCompleteError> {
-    const targetOutcomes = outcomes.filter(o => o.sportsbookCode === targetBook);
+export function findTargetOutcomes(outcomes: Outcome[], targetBook: string, line?: number): Result<Outcome[], TargetOutcomeNotFoundError | TargetOutcomeNotCompleteError> {
+    let targetOutcomes = outcomes.filter(o => o.sportsbookCode === targetBook);
+
+    // If line is specified, filter to only outcomes at that line
+    if (line !== undefined) {
+        targetOutcomes = targetOutcomes.filter(o => parseFloat(o.line) === line);
+    }
+
     if (targetOutcomes.length === 0) {
         return { success: false, error: new TargetOutcomeNotFoundError(targetBook) };
     }
@@ -210,6 +242,35 @@ export function extractAmericanOdds(outcomes: Outcome[], side: 'Over' | 'Under')
         return { success: false, error: new CalculationError(`Invalid American odds: ${outcome.americanOdds}`, 'INVALID_ODDS') };
     }
     return { success: true, value: odds };
+}
+
+/**
+ * Finds the best available odds across all sportsbooks for a given line and side.
+ * "Best" = highest American odds (less negative or more positive = better payout).
+ */
+export function findBestOddsAcrossBooks(
+    outcomes: Outcome[],
+    line: number,
+    side: 'Over' | 'Under'
+): Result<{ sportsbookCode: string; americanOdds: number }, CalculationError> {
+    const matching = outcomes
+        .filter(o => parseFloat(o.line) === line && o.label === side)
+        .map(o => ({ ...o, parsedOdds: parseInt(o.americanOdds) }))
+        .filter(o => !isNaN(o.parsedOdds));
+
+    if (matching.length === 0) {
+        return {
+            success: false,
+            error: new CalculationError(`No outcomes found for line ${line} ${side}`, 'NO_MATCHING_OUTCOMES')
+        };
+    }
+
+    const best = matching.reduce((a, b) => a.parsedOdds > b.parsedOdds ? a : b);
+
+    return {
+        success: true,
+        value: { sportsbookCode: best.sportsbookCode, americanOdds: best.parsedOdds }
+    };
 }
 
 /**

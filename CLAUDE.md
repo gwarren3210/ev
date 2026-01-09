@@ -20,12 +20,56 @@ Default to using Bun instead of Node.js.
 
 ## Testing
 
-Use `bun test` to run tests.
+The test suite is organized into three categories:
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+**Unit Tests** - Fast, isolated tests with mocks (default)
+```bash
+bun test                 # Run unit tests only (~37ms)
+bun run test:unit        # Same as above
+bun run test:watch       # Watch mode for TDD
+```
 
-test("hello world", () => {
-  expect(1).toBe(1);
+**Integration Tests** - Tests requiring real Redis
+```bash
+bun run test:integration # Requires Redis running on localhost:6379
+```
+
+**Fixture Tests** - Data structure validation
+```bash
+bun run test:fixtures    # Validate data assumptions
+```
+
+**All Tests**
+```bash
+bun run test:all         # Run all 203 tests (~1.4s)
+```
+
+### Test Structure
+
+```
+tests/
+├── unit/          # 161 tests - Mocked dependencies
+├── integration/   # 6 tests - Real Redis connection
+└── fixtures/      # 36 tests - Data validation
+```
+
+### Writing Tests
+
+```ts#example.test.ts
+import { test, expect, describe, beforeEach } from "bun:test";
+
+describe("Feature", () => {
+  beforeEach(() => {
+    // Setup
+  });
+
+  test("should do something", () => {
+    expect(1).toBe(1);
+  });
 });
 ```
+
+**For integration tests requiring Redis:**
+- Import `redis` from `bun` directly: `import { redis } from 'bun'`
+- Don't use mocked `getRedisClient()` from src/cache/redis.js
+- Place tests in `tests/integration/`

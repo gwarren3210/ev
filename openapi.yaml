@@ -93,6 +93,9 @@ paths:
                     impliedProbability: 0.48
                     expectedValue: 15.5
                     sharpsUsed: ["Pinnacle", "BookMaker"]
+                    bestAvailableOdds:
+                      sportsbookCode: "Pinnacle"
+                      americanOdds: 115
                 negativeEV:
                   summary: Negative EV bet
                   value:
@@ -106,6 +109,31 @@ paths:
                     impliedProbability: 0.55
                     expectedValue: -7.69
                     sharpsUsed: ["Pinnacle"]
+                    bestAvailableOdds:
+                      sportsbookCode: "FanDuel"
+                      americanOdds: -120
+                withKelly:
+                  summary: With Kelly bet sizing
+                  value:
+                    player: "LeBron James"
+                    market: "Points"
+                    line: 25.5
+                    side: "Over"
+                    targetBook: "DraftKings"
+                    targetOdds: 110
+                    trueProbability: 0.55
+                    impliedProbability: 0.48
+                    expectedValue: 15.5
+                    sharpsUsed: ["Pinnacle", "BookMaker"]
+                    bestAvailableOdds:
+                      sportsbookCode: "Pinnacle"
+                      americanOdds: 115
+                    kelly:
+                      full: 0.078
+                      quarter: 0.0195
+                      recommendedBet: 19.5
+                      expectedProfit: 3.02
+                      bankroll: 1000
         '400':
           description: Invalid request body
           content:
@@ -127,6 +155,11 @@ paths:
                   value:
                     error: "Offer not found for ID: invalid-offer-123"
                     code: "OFFER_NOT_FOUND"
+                offerNotFoundForPlayer:
+                  summary: Player not found in offer
+                  value:
+                    error: "Offer not found for player ID: player-123"
+                    code: "OFFER_NOT_FOUND_FOR_PLAYER"
                 targetOutcomeNotFound:
                   summary: Target book not available
                   value:
@@ -175,6 +208,158 @@ paths:
               example:
                 error: "Upstream error: Service Unavailable"
                 code: "API_ERROR"
+
+  /calculate-ev/batch:
+    post:
+      summary: Batch Calculate Expected Value
+      description: |
+        Calculates Expected Value (EV) for multiple bets in a single request.
+        All items must share the same offerId, which allows for a single API call
+        to fetch market data, improving efficiency.
+
+        **Benefits:**
+        - Single API call for market data (offerId is shared)
+        - Individual item caching
+        - Partial success handling (some items can fail while others succeed)
+
+        **Limits:**
+        - Maximum 10 items per batch request
+      operationId: calculateEVBatch
+      tags:
+        - EV Calculation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCalculateEVRequest'
+            examples:
+              basic:
+                summary: Batch of 3 players
+                value:
+                  offerId: "nba-player-points"
+                  items:
+                    - playerId: "player-123"
+                      line: 25.5
+                      side: "Over"
+                      targetBook: "DraftKings"
+                      sharps: ["Pinnacle", "BookMaker"]
+                      devigMethod: "multiplicative"
+                    - playerId: "player-456"
+                      line: 18.5
+                      side: "Under"
+                      targetBook: "FanDuel"
+                      sharps: ["Pinnacle"]
+                      devigMethod: "power"
+                    - playerId: "player-789"
+                      line: 7.5
+                      side: "Over"
+                      targetBook: "BetMGM"
+                      sharps: ["Pinnacle", "Circa"]
+                      devigMethod: "multiplicative"
+                      bankroll: 1000
+      responses:
+        '200':
+          description: Batch processed (may contain partial failures)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCalculateEVResponse'
+              examples:
+                allSuccess:
+                  summary: All items succeeded
+                  value:
+                    offerId: "nba-player-points"
+                    totalItems: 2
+                    successCount: 2
+                    errorCount: 0
+                    results:
+                      - index: 0
+                        success: true
+                        result:
+                          player: "LeBron James"
+                          market: "Points"
+                          line: 25.5
+                          side: "Over"
+                          targetBook: "DraftKings"
+                          targetOdds: -110
+                          trueProbability: 0.55
+                          impliedProbability: 0.52
+                          expectedValue: 5.8
+                          sharpsUsed: ["Pinnacle", "BookMaker"]
+                          bestAvailableOdds:
+                            sportsbookCode: "Pinnacle"
+                            americanOdds: -105
+                      - index: 1
+                        success: true
+                        result:
+                          player: "Anthony Davis"
+                          market: "Points"
+                          line: 18.5
+                          side: "Under"
+                          targetBook: "FanDuel"
+                          targetOdds: -115
+                          trueProbability: 0.48
+                          impliedProbability: 0.53
+                          expectedValue: -9.4
+                          sharpsUsed: ["Pinnacle"]
+                          bestAvailableOdds:
+                            sportsbookCode: "FanDuel"
+                            americanOdds: -115
+                partialSuccess:
+                  summary: Some items failed
+                  value:
+                    offerId: "nba-player-points"
+                    totalItems: 2
+                    successCount: 1
+                    errorCount: 1
+                    results:
+                      - index: 0
+                        success: true
+                        result:
+                          player: "LeBron James"
+                          market: "Points"
+                          line: 25.5
+                          side: "Over"
+                          targetBook: "DraftKings"
+                          targetOdds: -110
+                          trueProbability: 0.55
+                          impliedProbability: 0.52
+                          expectedValue: 5.8
+                          sharpsUsed: ["Pinnacle"]
+                          bestAvailableOdds:
+                            sportsbookCode: "Pinnacle"
+                            americanOdds: -105
+                      - index: 1
+                        success: false
+                        error:
+                          code: "OFFER_NOT_FOUND_FOR_PLAYER"
+                          message: "Offer not found for player ID: invalid-player"
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              examples:
+                emptyItems:
+                  summary: Empty items array
+                  value:
+                    error: "Invalid request body"
+                    details: "items must contain at least 1 item"
+                tooManyItems:
+                  summary: Too many items
+                  value:
+                    error: "Invalid request body"
+                    details: "Maximum batch size is 10 items"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+              example:
+                error: "Internal server error"
 
   /test:
     get:
@@ -244,6 +429,12 @@ components:
             - **shin**: Assumes insider trading (equivalent to additive for n=2)
             - **os_skewed**: Over/Under specific (65% vig on Over, 35% on Under)
           example: "multiplicative"
+        bankroll:
+          type: number
+          description: Optional bankroll amount for Kelly Criterion bet sizing
+          minimum: 0
+          exclusiveMinimum: true
+          example: 1000
 
     CalculateEVResponse:
       type: object
@@ -258,6 +449,7 @@ components:
         - impliedProbability
         - expectedValue
         - sharpsUsed
+        - bestAvailableOdds
       properties:
         player:
           type: string
@@ -306,6 +498,23 @@ components:
           items:
             type: string
           example: ["Pinnacle", "BookMaker"]
+        bestAvailableOdds:
+          type: object
+          description: Best odds available across all sportsbooks for this side
+          required:
+            - sportsbookCode
+            - americanOdds
+          properties:
+            sportsbookCode:
+              type: string
+              description: The sportsbook offering the best odds
+              example: "Pinnacle"
+            americanOdds:
+              type: number
+              description: The best American odds available
+              example: -105
+        kelly:
+          $ref: '#/components/schemas/KellyBetSizing'
 
     ApiError:
       type: object
@@ -322,6 +531,7 @@ components:
           description: Machine-readable error code
           enum:
             - OFFER_NOT_FOUND
+            - OFFER_NOT_FOUND_FOR_PLAYER
             - TARGET_OUTCOME_NOT_FOUND
             - TARGET_BOOK_SIDE_MISSING
             - ONE_SIDED_MARKET
@@ -355,6 +565,183 @@ components:
           type: string
           description: Error message
           example: "Internal server error"
+
+    KellyBetSizing:
+      type: object
+      description: Kelly Criterion bet sizing output (only included when bankroll is provided)
+      required:
+        - full
+        - quarter
+        - recommendedBet
+        - expectedProfit
+        - bankroll
+      properties:
+        full:
+          type: number
+          description: Full Kelly fraction (what percentage of bankroll to bet)
+          example: 0.052
+        quarter:
+          type: number
+          description: Quarter Kelly fraction (conservative 0.25x Kelly)
+          example: 0.013
+        recommendedBet:
+          type: number
+          description: Recommended bet amount in the same units as bankroll
+          example: 13
+        expectedProfit:
+          type: number
+          description: Expected profit based on EV and recommended bet
+          example: 2.02
+        bankroll:
+          type: number
+          description: The bankroll value used for calculation
+          example: 1000
+
+    BatchEVItem:
+      type: object
+      description: A single item in a batch EV calculation request
+      required:
+        - playerId
+        - line
+        - side
+        - targetBook
+        - sharps
+        - devigMethod
+      properties:
+        playerId:
+          type: string
+          description: The unique player identifier
+          example: "player-123"
+        line:
+          type: number
+          description: The betting line
+          example: 25.5
+        side:
+          type: string
+          enum: [Over, Under]
+          description: The side of the bet
+          example: "Over"
+        targetBook:
+          type: string
+          description: The target sportsbook code to evaluate for EV
+          example: "DraftKings"
+        sharps:
+          type: array
+          description: Array of sharp sportsbook codes
+          items:
+            type: string
+          minItems: 1
+          example: ["Pinnacle", "BookMaker"]
+        devigMethod:
+          type: string
+          enum: [multiplicative, additive, power, shin, os_skewed]
+          description: The devigging method to use
+          example: "multiplicative"
+        bankroll:
+          type: number
+          description: Optional bankroll amount for Kelly Criterion bet sizing
+          minimum: 0
+          exclusiveMinimum: true
+          example: 1000
+
+    BatchCalculateEVRequest:
+      type: object
+      description: Request body for batch EV calculation. All items share the same offerId.
+      required:
+        - offerId
+        - items
+      properties:
+        offerId:
+          type: string
+          description: The unique offer identifier from OddsShopper API (shared by all items)
+          example: "nba-player-points"
+        items:
+          type: array
+          description: Array of items to calculate EV for (max 10)
+          items:
+            $ref: '#/components/schemas/BatchEVItem'
+          minItems: 1
+          maxItems: 10
+
+    BatchItemResultSuccess:
+      type: object
+      required:
+        - index
+        - success
+        - result
+      properties:
+        index:
+          type: integer
+          description: Index of this item in the original request
+          example: 0
+        success:
+          type: boolean
+          enum: [true]
+        result:
+          $ref: '#/components/schemas/CalculateEVResponse'
+
+    BatchItemResultError:
+      type: object
+      required:
+        - index
+        - success
+        - error
+      properties:
+        index:
+          type: integer
+          description: Index of this item in the original request
+          example: 1
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              example: "OFFER_NOT_FOUND_FOR_PLAYER"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Offer not found for player ID: player-456"
+
+    BatchCalculateEVResponse:
+      type: object
+      description: Response body for batch EV calculation
+      required:
+        - offerId
+        - totalItems
+        - successCount
+        - errorCount
+        - results
+      properties:
+        offerId:
+          type: string
+          description: The offer ID that was processed
+          example: "nba-player-points"
+        totalItems:
+          type: integer
+          description: Total number of items in the request
+          example: 3
+        successCount:
+          type: integer
+          description: Number of successfully calculated items
+          example: 2
+        errorCount:
+          type: integer
+          description: Number of failed items
+          example: 1
+        results:
+          type: array
+          description: Results for each item (in request order)
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/BatchItemResultSuccess'
+              - $ref: '#/components/schemas/BatchItemResultError'
 
 tags:
   - name: EV Calculation

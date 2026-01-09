@@ -1,9 +1,6 @@
 import app from './server.js';
 import { validateEnvironment } from './config/env.js';
 
-/**
- * Starts the local development server with environment validation and logging
- */
 function startServer() {
     try {
         const env = validateEnvironment();
@@ -17,19 +14,17 @@ function startServer() {
         console.log(`Timestamp:       ${new Date().toISOString()}`);
         console.log('='.repeat(50));
 
+        // Use Bun.serve to wrap your express app
+        // This ensures the process stays alive correctly in Bun
         app.listen(env.PORT, () => {
             console.log(`✓ Server is running on http://localhost:${env.PORT}`);
             console.log('✓ Health check: GET /test');
             console.log('✓ Calculate EV: POST /calculate-ev');
             console.log('\nPress Ctrl+C to stop the server\n');
         });
+
     } catch (error) {
-        console.error('Failed to start server:');
-        if (error instanceof Error) {
-            console.error(error.message);
-        } else {
-            console.error('Unknown error:', error);
-        }
+        console.error('Failed to start server:', error);
         process.exit(1);
     }
 }
