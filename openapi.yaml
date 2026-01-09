@@ -1,0 +1,363 @@
+openapi: 3.0.3
+info:
+  title: Sports Betting EV Calculator API
+  description: |
+    A production-ready API for calculating Expected Value (EV) on sports betting markets
+    using multiple devigging methods and sharp book aggregation.
+
+    This service fetches live odds from the OddsShopper API, removes bookmaker vigorish
+    using various devigging algorithms, and calculates the true expected value of a bet
+    by comparing a target book's odds against aggregated sharp book probabilities.
+  version: 1.0.0
+  contact:
+    name: API Support
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://your-domain.vercel.app
+    description: Production server
+
+paths:
+  /calculate-ev:
+    post:
+      summary: Calculate Expected Value
+      description: |
+        Calculates the Expected Value (EV) for a specific bet by comparing target book odds
+        against aggregated sharp book probabilities.
+
+        **Process:**
+        1. Fetches live market data from OddsShopper API
+        2. Identifies the targeted player offer
+        3. Filters sharp books with complete two-sided markets
+        4. Calculates true probability by aggregating devigged sharp book odds
+        5. Calculates implied probability from target book odds
+        6. Computes final EV percentage
+      operationId: calculateEV
+      tags:
+        - EV Calculation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalculateEVRequest'
+            examples:
+              basic:
+                summary: Basic EV calculation
+                value:
+                  offerId: "nba-player-points"
+                  playerId: "player-123"
+                  sharps: ["Pinnacle", "BookMaker"]
+                  targetBook: "DraftKings"
+                  line: 25.5
+                  side: "Over"
+                  devigMethod: "multiplicative"
+              multipleSharpBooks:
+                summary: Using multiple sharp books
+                value:
+                  offerId: "nfl-player-yards"
+                  playerId: "player-456"
+                  sharps: ["Pinnacle", "BookMaker", "Circa"]
+                  targetBook: "FanDuel"
+                  line: 75.5
+                  side: "Under"
+                  devigMethod: "power"
+              skewedMethod:
+                summary: Using OS Skewed method
+                value:
+                  offerId: "mlb-player-hits"
+                  playerId: "player-789"
+                  sharps: ["Pinnacle"]
+                  targetBook: "BetMGM"
+                  line: 1.5
+                  side: "Over"
+                  devigMethod: "os_skewed"
+      responses:
+        '200':
+          description: EV calculated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculateEVResponse'
+              examples:
+                positiveEV:
+                  summary: Positive EV bet
+                  value:
+                    player: "LeBron James"
+                    market: "Points"
+                    line: 25.5
+                    side: "Over"
+                    targetBook: "DraftKings"
+                    targetOdds: 110
+                    trueProbability: 0.55
+                    impliedProbability: 0.48
+                    expectedValue: 15.5
+                    sharpsUsed: ["Pinnacle", "BookMaker"]
+                negativeEV:
+                  summary: Negative EV bet
+                  value:
+                    player: "Stephen Curry"
+                    market: "Three Pointers Made"
+                    line: 3.5
+                    side: "Under"
+                    targetBook: "FanDuel"
+                    targetOdds: -120
+                    trueProbability: 0.48
+                    impliedProbability: 0.55
+                    expectedValue: -7.69
+                    sharpsUsed: ["Pinnacle"]
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                error: "Invalid request body"
+                details: "side must be either 'Over' or 'Under'"
+        '404':
+          description: Offer or outcome not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                offerNotFound:
+                  summary: Offer not found
+                  value:
+                    error: "Offer not found for ID: invalid-offer-123"
+                    code: "OFFER_NOT_FOUND"
+                targetOutcomeNotFound:
+                  summary: Target book not available
+                  value:
+                    error: "Target outcome not found for book: UnknownBook"
+                    code: "TARGET_OUTCOME_NOT_FOUND"
+        '409':
+          description: One-sided market error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: "Target outcome not complete for book: DraftKings"
+                code: "ONE_SIDED_MARKET"
+        '422':
+          description: Calculation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              examples:
+                noSharpBooks:
+                  summary: No sharp books available
+                  value:
+                    error: "No sharp outcomes found for sharps: Pinnacle, BookMaker"
+                    code: "NO_SHARP_OUTCOMES"
+                devigError:
+                  summary: Devigging failed
+                  value:
+                    error: "Market data error: Implied probability cannot be zero."
+                    code: "DEVIG_ERROR"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+              example:
+                error: "Internal server error"
+        '502':
+          description: Upstream API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: "Upstream error: Service Unavailable"
+                code: "API_ERROR"
+
+  /test:
+    get:
+      summary: Health check
+      description: Simple health check endpoint to verify the service is running
+      operationId: healthCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "test"
+
+components:
+  schemas:
+    CalculateEVRequest:
+      type: object
+      required:
+        - offerId
+        - playerId
+        - sharps
+        - targetBook
+        - line
+        - side
+        - devigMethod
+      properties:
+        offerId:
+          type: string
+          description: The unique offer identifier from OddsShopper API
+          example: "nba-player-points"
+        playerId:
+          type: string
+          description: The unique player identifier
+          example: "player-123"
+        sharps:
+          type: array
+          description: Array of sharp sportsbook codes to aggregate for true probability
+          items:
+            type: string
+          minItems: 1
+          example: ["Pinnacle", "BookMaker", "Circa"]
+        targetBook:
+          type: string
+          description: The target sportsbook code to evaluate for EV
+          example: "DraftKings"
+        line:
+          type: number
+          description: The betting line (e.g., 25.5 points, 1.5 hits)
+          example: 25.5
+        side:
+          type: string
+          enum: [Over, Under]
+          description: The side of the bet
+          example: "Over"
+        devigMethod:
+          type: string
+          enum: [multiplicative, additive, power, shin, os_skewed]
+          description: |
+            The devigging method to use:
+            - **multiplicative**: Margin proportional to odds (most common)
+            - **additive**: Equal vig distribution across outcomes
+            - **power**: Logarithmic distribution via binary search
+            - **shin**: Assumes insider trading (equivalent to additive for n=2)
+            - **os_skewed**: Over/Under specific (65% vig on Over, 35% on Under)
+          example: "multiplicative"
+
+    CalculateEVResponse:
+      type: object
+      required:
+        - player
+        - market
+        - line
+        - side
+        - targetBook
+        - targetOdds
+        - trueProbability
+        - impliedProbability
+        - expectedValue
+        - sharpsUsed
+      properties:
+        player:
+          type: string
+          description: Player name
+          example: "LeBron James"
+        market:
+          type: string
+          description: Market type (e.g., "Points", "Rebounds", "Assists")
+          example: "Points"
+        line:
+          type: number
+          description: The betting line
+          example: 25.5
+        side:
+          type: string
+          enum: [Over, Under]
+          description: The side of the bet
+          example: "Over"
+        targetBook:
+          type: string
+          description: Target sportsbook that was evaluated
+          example: "DraftKings"
+        targetOdds:
+          type: number
+          description: American odds from the target book (e.g., -110, +150)
+          example: -110
+        trueProbability:
+          type: number
+          description: Estimated true probability of the outcome (0 to 1)
+          minimum: 0
+          maximum: 1
+          example: 0.48
+        impliedProbability:
+          type: number
+          description: Target book's devigged implied probability (0 to 1)
+          minimum: 0
+          maximum: 1
+          example: 0.52
+        expectedValue:
+          type: number
+          description: Expected Value as a percentage (e.g., 5.2 means 5.2% EV)
+          example: -7.69
+        sharpsUsed:
+          type: array
+          description: Sharp books that were successfully used in the calculation
+          items:
+            type: string
+          example: ["Pinnacle", "BookMaker"]
+
+    ApiError:
+      type: object
+      required:
+        - error
+        - code
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "Offer not found for ID: abc123"
+        code:
+          type: string
+          description: Machine-readable error code
+          enum:
+            - OFFER_NOT_FOUND
+            - TARGET_OUTCOME_NOT_FOUND
+            - TARGET_BOOK_SIDE_MISSING
+            - ONE_SIDED_MARKET
+            - NO_SHARP_OUTCOMES
+            - DEVIG_ERROR
+            - API_ERROR
+            - INVALID_ODDS
+          example: "OFFER_NOT_FOUND"
+
+    ValidationError:
+      type: object
+      required:
+        - error
+        - details
+      properties:
+        error:
+          type: string
+          description: High-level error description
+          example: "Invalid request body"
+        details:
+          type: string
+          description: Detailed validation error message
+          example: "side must be either 'Over' or 'Under'"
+
+    GenericError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Internal server error"
+
+tags:
+  - name: EV Calculation
+    description: Calculate expected value for sports bets
+  - name: Health
+    description: Health check endpoints
