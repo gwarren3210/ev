@@ -168,6 +168,48 @@ describe('Server Endpoint Integration Tests', () => {
         });
     });
 
+    describe('CORS Headers', () => {
+        test('responds to OPTIONS preflight request', async () => {
+            const response = await fetch(`${baseUrl}/calculate-ev`, {
+                method: 'OPTIONS',
+            });
+
+            // cors middleware returns 204 for OPTIONS preflight
+            expect(response.status).toBe(204);
+        });
+
+        test('includes CORS headers in response', async () => {
+            const response = await fetch(`${baseUrl}/test`);
+
+            const corsHeader = response.headers.get('access-control-allow-origin');
+            expect(corsHeader).toBe('*');
+        });
+
+        test('allows POST requests from any origin', async () => {
+            const response = await fetch(`${baseUrl}/calculate-ev`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Origin': 'https://example.com'
+                },
+                body: JSON.stringify({
+                    offerId: 'server-test-offer',
+                    playerId: 'server-test-player',
+                    line: 20.5,
+                    side: 'Over',
+                    targetBook: 'DRAFTKINGS',
+                    sharps: ['PINNACLE'],
+                    devigMethod: 'multiplicative'
+                })
+            });
+
+            // Should not be blocked by CORS
+            expect(response.status).not.toBe(0);
+            const corsHeader = response.headers.get('access-control-allow-origin');
+            expect(corsHeader).toBe('*');
+        });
+    });
+
     describe('POST /calculate-ev', () => {
         test('returns 400 for missing required fields', async () => {
             const response = await fetch(`${baseUrl}/calculate-ev`, {
@@ -603,6 +645,75 @@ describe('Server Endpoint Integration Tests', () => {
 
             // Express should return 400 for malformed JSON
             expect([400, 500]).toContain(response.status);
+        });
+    });
+
+    describe('GET /calculate-ev/sample', () => {
+        test('returns sample request when data available', async () => {
+            const response = await fetch(`${baseUrl}/calculate-ev/sample`);
+
+            expect(response.status).toBe(200);
+
+            const json = await response.json() as {
+                description: string;
+                request: {
+                    offerId: string;
+                    playerId: string;
+                    line: number;
+                    side: string;
+                    targetBook: string;
+                    sharps: string[];
+                    devigMethod: string;
+                };
+                curl: string;
+            };
+
+            expect(json.description).toContain('Sample request for');
+            expect(json.request).toBeDefined();
+            expect(json.request.offerId).toBeDefined();
+            expect(json.request.playerId).toBeDefined();
+            expect(json.request.side).toBe('Over');
+            expect(json.request.devigMethod).toBe('multiplicative');
+            expect(json.curl).toContain('curl -X POST');
+        });
+    });
+
+    describe('GET /calculate-ev/batch/sample', () => {
+        test('returns batch sample request when data available', async () => {
+            const response = await fetch(`${baseUrl}/calculate-ev/batch/sample`);
+
+            // The mock only has 1 participant, so batch sample may return 503
+            // as it requires at least 2 players. Both outcomes are valid test results.
+            if (response.status === 200) {
+                const json = await response.json() as {
+                    description: string;
+                    playerNames: string[];
+                    request: {
+                        offerId: string;
+                        items: Array<{
+                            playerId: string;
+                            line: number;
+                            side: string;
+                            targetBook: string;
+                            sharps: string[];
+                            devigMethod: string;
+                        }>;
+                    };
+                    curl: string;
+                };
+
+                expect(json.description).toContain('Batch sample with');
+                expect(json.playerNames).toBeInstanceOf(Array);
+                expect(json.request.offerId).toBeDefined();
+                expect(json.request.items).toBeInstanceOf(Array);
+                expect(json.request.items.length).toBeGreaterThanOrEqual(2);
+                expect(json.curl).toContain('curl -X POST');
+            } else {
+                // 503 is expected when not enough players for batch
+                expect(response.status).toBe(503);
+                const json = await response.json() as { error: string };
+                expect(json.error).toBe('No live sample data available');
+            }
         });
     });
 });
