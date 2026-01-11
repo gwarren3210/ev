@@ -13,7 +13,6 @@ info:
     name: API Support
 servers:
   - url: https://stokastic.vercel.app
-  - url: https://ev-git-refactor-gwarren3210s-projects.vercel.app/
 
 
 paths:
