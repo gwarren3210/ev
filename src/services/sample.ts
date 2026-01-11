@@ -96,7 +96,7 @@ export async function fetchSingleSample(): Promise<{ offerId: string; player: Sa
         try {
             const result = await fetchFromAPI(offerId);
 
-            if (!result.success || result.value.length === 0) {
+            if (result.success === false || result.value.length === 0) {
                 continue;
             }
 
@@ -124,7 +124,7 @@ export async function fetchBatchSample(maxPlayers: number = 3): Promise<SampleDa
         try {
             const result = await fetchFromAPI(offerId);
 
-            if (!result.success || result.value.length === 0) {
+            if (result.success === false || result.value.length === 0) {
                 continue;
             }
 

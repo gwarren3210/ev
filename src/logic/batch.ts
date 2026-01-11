@@ -12,6 +12,30 @@ import { getCachedEVResult, setCachedEVResult } from '../cache/index.js';
 import { OfferNotFoundError, ApiError } from '../errors/index.js';
 
 /**
+ * Creates a batch response where all items have the same error.
+ * Used when a shared dependency (like offer fetch) fails.
+ */
+function createAllErrorsBatchResponse(
+    offerId: string,
+    itemCount: number,
+    error: { code: string; message: string }
+): BatchCalculateEVResponse {
+    const results: BatchItemResult[] = Array.from({ length: itemCount }, (_, i) => ({
+        index: i,
+        success: false as const,
+        error,
+    }));
+
+    return {
+        offerId,
+        totalItems: itemCount,
+        successCount: 0,
+        errorCount: itemCount,
+        results,
+    };
+}
+
+/**
  * Processes a batch of EV calculations.
  * All items share the same offerId, so only one API call is made.
  *
@@ -30,41 +54,20 @@ export async function calculateEVBatch(
     // Step 1: Fetch offer data ONCE for all items (with caching)
     const offerResult: Result<Offer[], ApiError | OfferNotFoundError> = await fetchOddsShopperData(req.offerId, options);
 
-    if (!offerResult.success) {
-        req.items.forEach((_, i) => {
-            results.push({
-                index: i,
-                success: false,
-                error: { code: offerResult.error.code, message: offerResult.error.message },
-            });
-            errorCount++;
-        });
-
-        return {
-            offerId: req.offerId,
-            totalItems: req.items.length,
-            successCount,
-            errorCount,
-            results,
-        };
+    if (offerResult.success === false) {
+        return createAllErrorsBatchResponse(
+            req.offerId,
+            req.items.length,
+            { code: offerResult.error.code, message: offerResult.error.message }
+        );
     }
-    if (offerResult.value.length === 0) {
-        req.items.forEach((_, i) => {
-            results.push({
-                index: i,
-                success: false,
-                error: { code: 'NOT_FOUND', message: 'Offer not found' },
-            });
-            errorCount++;
-        });
 
-        return {
-            offerId: req.offerId,
-            totalItems: req.items.length,
-            successCount,
-            errorCount,
-            results,
-        };
+    if (offerResult.value.length === 0) {
+        return createAllErrorsBatchResponse(
+            req.offerId,
+            req.items.length,
+            { code: 'NOT_FOUND', message: 'Offer not found' }
+        );
     }
 
     const allOffers = offerResult.value;

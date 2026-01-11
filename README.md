@@ -6,6 +6,17 @@ An API for calculating Expected Value (EV) on sports betting markets using multi
 
 This service fetches live odds from the OddsShopper API, removes bookmaker vigorish using various devigging algorithms, and calculates the true expected value of a bet by comparing a target book's odds against aggregated sharp book probabilities.
 
+## Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [API Documentation](#api-documentation)
+- [Project Structure](#project-structure)
+- [Architecture](#architecture)
+- [Testing](#testing)
+- [Deployment](#deployment)
+
 ## Features
 
 - **5 Devigging Methods**: Multiplicative, Additive, Power, Shin, and OS Skewed
@@ -67,38 +78,6 @@ bun run start
 
 The server will start on `http://localhost:8080` (or your configured PORT).
 
-### Running Tests
-
-The test suite is organized into unit tests (fast, isolated), integration tests (requires Redis), and fixture tests:
-
-```bash
-# Run unit tests (default - fast feedback)
-bun test
-# or
-bun run test:unit
-
-# Run integration tests (requires Redis)
-bun run test:integration
-
-# Run fixture/data validation tests
-bun run test:fixtures
-
-# Run all tests
-bun run test:all
-
-# Watch mode for unit tests
-bun run test:watch
-
-# Run with coverage
-bun test --coverage
-```
-
-**Prerequisites for integration tests:**
-- Redis server running on `localhost:6379`
-- Set `REDIS_URL` environment variable
-
-See [tests/integration/README.md](tests/integration/README.md) for more details.
-
 ## API Documentation
 
 ### Calculate EV
@@ -117,7 +96,7 @@ Calculates the Expected Value (EV) for a specific bet by comparing target book o
   "targetBook": "string",
   "line": "number",
   "side": "Over" | "Under",
-  "devigMethod": "multiplicative" | "additive" | "power" | "shin" | "osskeweded"
+  "devigMethod": "multiplicative" | "additive" | "power" | "shin" | "osskewed"
 }
 ```
 
@@ -139,7 +118,7 @@ Calculates the Expected Value (EV) for a specific bet by comparing target book o
 - `additive` - Equal vig distribution across outcomes
 - `power` - Logarithmic distribution via binary search
 - `shin` - Assumes insider trading (equivalent to additive for n=2)
-- `osskeweded` - Over/Under specific (65% vig on Over, 35% on Under)
+- `osskewed` - Over/Under specific (65% vig on Over, 35% on Under)
 
 #### Response
 
@@ -177,53 +156,14 @@ Calculates the Expected Value (EV) for a specific bet by comparing target book o
 
 #### Error Responses
 
-**400 Bad Request** - Invalid request body:
-```json
-{
-  "error": "Invalid request body",
-  "details": "validation error message"
-}
-```
-
-**404 Not Found** - Offer or outcome not found:
-```json
-{
-  "error": "Offer not found for ID: abc123",
-  "code": "OFFER_NOT_FOUND"
-}
-```
-
-Or when player not found in offer:
-```json
-{
-  "error": "Offer not found for player ID: player-123",
-  "code": "OFFER_NOT_FOUND_FOR_PLAYER"
-}
-```
-
-**409 Conflict** - One-sided market:
-```json
-{
-  "error": "Target outcome not complete for book: DraftKings",
-  "code": "ONE_SIDED_MARKET"
-}
-```
-
-**422 Unprocessable Entity** - Calculation errors:
-```json
-{
-  "error": "No sharp outcomes found for sharps: Pinnacle, BookMaker",
-  "code": "NO_SHARP_OUTCOMES"
-}
-```
-
-**502 Bad Gateway** - Upstream API error:
-```json
-{
-  "error": "Upstream error: Service Unavailable",
-  "code": "API_ERROR"
-}
-```
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | - | Invalid request body (validation error) |
+| 404 | `OFFER_NOT_FOUND` | Offer ID not found |
+| 404 | `OFFER_NOT_FOUND_FOR_PLAYER` | Player not in offer |
+| 409 | `ONE_SIDED_MARKET` | Target book missing one side |
+| 422 | `NO_SHARP_OUTCOMES` | No sharp book data available |
+| 502 | `API_ERROR` | Upstream API error |
 
 ### Example Request
 
@@ -254,59 +194,24 @@ test
 ## Project Structure
 
 ```
-stokastic-interview2/
-├── api/
-│   └── index.ts                      # Vercel serverless entry point
-├── src/
-│   ├── cache/
-│   │   ├── index.ts                  # Caching logic (Redis)
-│   │   └── redis.ts                  # Redis client setup
-│   ├── config/
-│   │   └── env.ts                    # Environment validation
-│   ├── data/
-│   │   ├── data.json                 # Sample data
-│   │   └── jan10data.json            # Sample data
-│   ├── errors/
-│   │   └── index.ts                  # Custom error classes
-│   ├── logic/
-│   │   ├── batch.ts                  # Batch EV calculation
-│   │   ├── ev.ts                     # EV calculation orchestration
-│   │   └── devig.ts                  # Devigging algorithms
-│   ├── server/
-│   │   └── app.ts                    # Express app configuration
-│   ├── services/
-│   │   └── oddsshopper.ts            # OddsShopper API client
-│   ├── types/
-│   │   └── index.ts                  # TypeScript interfaces
-│   ├── utils/
-│   │   └── odds.ts                   # Odds conversion utilities
-│   └── local.ts                      # Local development server
-├── tests/
-│   ├── unit/                         # Unit tests (fast, isolated)
-│   │   ├── cache.test.ts             # Cache logic tests
-│   │   ├── env.test.ts               # Environment validation tests
-│   │   ├── ev.test.ts                # EV calculation tests
-│   │   ├── devig.test.ts             # Devigging algorithm tests
-│   │   ├── odds.test.ts              # Odds utility tests
-│   │   └── oddsshopper.test.ts       # API client tests
-│   ├── integration/                  # Integration tests (requires Redis)
-│   │   ├── redis-connection.test.ts  # Redis connectivity tests
-│   │   ├── redis-inspect.test.ts     # Redis inspection tests
-│   │   ├── redis-ttl.test.ts         # TTL verification tests
-│   │   ├── redis-cleanup.test.ts     # Cache cleanup tests
-│   │   ├── e2e.test.ts               # End-to-end tests
-│   │   └── README.md                 # Integration test documentation
-│   └── fixtures/                     # Data validation tests
-│       └── dataAssumptions.test.ts   # Data structure validation
-├── docs/
-│   ├── dataAssumptions.md            # Data structure validation docs
-│   └── shinProof.md                  # Mathematical proof: Shin = Additive for n=2
-├── .env.example                      # Environment variables template
-├── bunfig.toml                       # Bun test configuration
-├── openapi.yaml                      # OpenAPI 3.0 specification
-├── package.json
-├── tsconfig.json
-└── vercel.json
+src/
+├── cache/          # Redis caching layer
+├── config/         # Environment validation
+├── errors/         # Custom error classes
+├── logic/          # EV calculation, devigging, batch processing
+├── services/       # OddsShopper API client
+├── types/          # TypeScript interfaces
+├── utils/          # Odds conversion utilities
+└── server.ts       # Express app
+
+tests/
+├── unit/           # Fast, isolated tests
+├── integration/    # Redis-dependent tests
+└── fixtures/       # Data structure validation
+    └── data/       # Test data files
+
+api/                # Vercel serverless entry point
+docs/               # Mathematical proofs and data docs
 ```
 
 ## Architecture
@@ -360,100 +265,24 @@ All errors extend `CalculationError` with proper HTTP status codes.
 
 ## Testing
 
-The project includes comprehensive test coverage organized into three categories:
-
-### Test Structure
-
-```
-tests/
-├── unit/          # 161 tests - Fast, isolated with mocks
-│   └── Tests for cache, env, ev, devig, odds, and oddsshopper
-│
-├── integration/   # 83 tests - Real Redis connections
-│   └── Tests for batch processing, server endpoints, cache operations
-│
-└── fixtures/      # 36 tests - Data validation
-    └── Tests for data structure assumptions
-```
-
-### Running Tests
-
 ```bash
-# Quick feedback - unit tests only (default)
-bun test                     # 161 tests
-
-# Test categories
-bun run test:unit           # Unit tests (fast, isolated)
-bun run test:integration    # Integration tests (requires Redis)
-bun run test:fixtures       # Data validation tests
-
-# All tests
-bun run test:all            # 280 tests across 15 files
-
-# Development
-bun run test:watch          # Watch mode for unit tests
-bun test --coverage         # Coverage report
+bun test                     # Unit tests (fast, isolated)
+bun run test:integration     # Integration tests (requires Redis)
+bun run test:fixtures        # Data validation tests
+bun run test:all             # All tests
+bun run test:watch           # Watch mode
+bun test --coverage          # Coverage report
 ```
 
-### Test Organization
+| Category | Tests | Description |
+|----------|-------|-------------|
+| Unit | 161 | Fast, isolated with mocks |
+| Integration | 83 | Requires Redis on localhost:6379 |
+| Fixtures | 36 | Data structure validation |
 
-**Unit Tests** (`tests/unit/`)
-- **Fast execution** (<50ms) with mocked dependencies
-- **No external services** required
-- **Isolated testing** of business logic
-- Mock Redis and API clients for predictable behavior
+**Coverage**: 89.61% functions, 89.68% lines. Core algorithms at 100%.
 
-**Integration Tests** (`tests/integration/`)
-- **Real Redis** connection required
-- **Batch processing** tests with mocked API data
-- **Server endpoint** tests for HTTP request/response
-- **Cache operations** tests with real Redis
-- **TTL verification** and cache invalidation tests
-- See [tests/integration/README.md](tests/integration/README.md) for setup
-
-**Fixture Tests** (`tests/fixtures/`)
-- **Data structure validation**
-- Ensures API response format assumptions are correct
-
-### Test Results
-
-```
-280 pass
-14 skip
-0 fail
-50653 expect() calls
-Ran 294 tests across 15 files. [3.16s]
-```
-
-### Coverage Report
-
-```
------------------------------|---------|---------|-------------------
-File                         | % Funcs | % Lines | Uncovered Line #s
------------------------------|---------|---------|-------------------
-All files                    |   89.61 |   89.68 |
- src/cache/index.ts          |  100.00 |  100.00 |
- src/cache/redis.ts          |    0.00 |   17.24 | 11-31,38,45-46
- src/config/env.ts           |  100.00 |  100.00 |
- src/errors/index.ts         |  100.00 |  100.00 |
- src/logic/batch.ts          |  100.00 |   82.73 | 90-99,130-138
- src/logic/devig.ts          |  100.00 |  100.00 |
- src/logic/ev.ts             |  100.00 |   96.57 | 46,90,103,110,121
- src/server.ts               |   85.71 |   91.67 | 60-62,98-100
- src/services/oddsshopper.ts |  100.00 |   98.28 |
- src/types/index.ts          |  100.00 |  100.00 |
- src/utils/odds.ts           |  100.00 |  100.00 |
------------------------------|---------|---------|-------------------
-```
-
-### Coverage Highlights
-
-- **Overall**: 89.61% functions, 89.68% lines
-- Core devigging algorithms: **100% coverage**
-- EV calculation logic: **100% function coverage**
-- Cache operations: **100% coverage**
-- Error handling: **100% coverage**
-- Type definitions: **100% coverage**
+See [tests/integration/README.md](tests/integration/README.md) for integration test setup.
 
 ## Deployment
 

@@ -35,6 +35,10 @@ const mockResponse: CalculateEVResponse = {
     impliedProbability: 0.52,
     expectedValue: 5.2,
     sharpsUsed: ["PINNACLE"],
+    bestAvailableOdds: {
+        sportsbookCode: "PINNACLE",
+        americanOdds: -105,
+    },
 };
 
 // ==========================================
@@ -66,9 +70,21 @@ import {
 } from "../../src/cache/index";
 
 describe("Cache Module", () => {
+    // Store original console methods
+    const originalConsole = {
+        error: console.error,
+        log: console.log,
+        warn: console.warn,
+    };
+
     beforeEach(() => {
         process.env.REDIS_URL = "redis://localhost:6379";
         process.env.ODDSSHOPPER_API_URL = "https://api.example.com";
+
+        // Suppress console output during tests
+        console.error = mock(() => {});
+        console.log = mock(() => {});
+        console.warn = mock(() => {});
 
         // Recreate mock Redis client with fresh call history
         mockRedis = {

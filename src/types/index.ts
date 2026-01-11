@@ -1,15 +1,6 @@
 import { z } from 'zod';
 
-export interface Participant {
-    id: string;
-    name: string;
-    title: string;
-    isHome: boolean;
-    participantLogo: string;
-    participantType: string;
-}
-
-const ParticipantSchema = z.object({
+export const ParticipantSchema = z.object({
     id: z.string(),
     name: z.string(),
     title: z.string(),
@@ -18,28 +9,9 @@ const ParticipantSchema = z.object({
     participantType: z.string(),
 });
 
-export interface Outcome {
-    id: string;
-    displayLabel: string;
-    americanOdds: string;
-    bestHoldOutcome: boolean;
-    odds: number;
-    line: string;
-    label: 'Over' | 'Under';
-    sportsbookCode: string;
-    sportsbookLogo: string;
-    participantLogo: string;
-    participantType: string;
-    deepLinkUrl?: string;
-    title: string;
-    trueWinProbability?: number;
-    ev?: number;
-    hashCodeBetSideWithLine: string;
-    hashCode: string;
-    sportsbookOutcomeId?: string;
-}
+export type Participant = z.infer<typeof ParticipantSchema>;
 
-const OutcomeSchema = z.object({
+export const OutcomeSchema = z.object({
     id: z.string(),
     displayLabel: z.string(),
     americanOdds: z.string(),
@@ -60,59 +32,35 @@ const OutcomeSchema = z.object({
     sportsbookOutcomeId: z.string().optional(),
 });
 
+export type Outcome = z.infer<typeof OutcomeSchema>;
 
-export interface SharpMetrics {
-    outlier: number;
-    averageOdds: number;
-    counts?: number;
-}
 
-const SharpMetricsSchema = z.object({
+export const SharpMetricsSchema = z.object({
     outlier: z.number(),
     averageOdds: z.number(),
     counts: z.number().optional(),
 });
 
-export interface Side {
-    label: string;
-    bestOutcome?: Outcome;
-    outcomes: Outcome[];
-    sharpMetrics?: SharpMetrics;
-}
+export type SharpMetrics = z.infer<typeof SharpMetricsSchema>;
 
-const SideSchema = z.object({
+export const SideSchema = z.object({
     label: z.string(),
     bestOutcome: OutcomeSchema.optional(),
     outcomes: z.array(OutcomeSchema),
     sharpMetrics: SharpMetricsSchema.optional(),
 });
 
-export interface GraphDetail {
-    hashCodeBetSideWithLine: string;
-    line: string;
-    label: string;
-}
+export type Side = z.infer<typeof SideSchema>;
 
-const GraphDetailSchema = z.object({
+export const GraphDetailSchema = z.object({
     hashCodeBetSideWithLine: z.string(),
     line: z.string(),
     label: z.string(),
 });
 
-export interface Offer {
-    eventName: string;
-    tournamentName: string;
-    offerName: string;
-    startDate: string;
-    dateString: string;
-    hold: number;
-    sportsbooks: string[];
-    participants: Participant[];
-    sides: Side[];
-    graphDetails?: GraphDetail[];
-}
+export type GraphDetail = z.infer<typeof GraphDetailSchema>;
 
-const OfferSchema = z.object({
+export const OfferSchema = z.object({
     eventName: z.string(),
     tournamentName: z.string(),
     offerName: z.string(),
@@ -125,59 +73,68 @@ const OfferSchema = z.object({
     graphDetails: z.array(GraphDetailSchema).optional(),
 });
 
+export type Offer = z.infer<typeof OfferSchema>;
+
 export type Data = Offer[];
 
 export const DataSchema = z.array(OfferSchema);
 
-// Request body type
-export type DevigMethod = 'multiplicative' | 'additive' | 'power' | 'shin' | 'osskeweded';
+// Request/Response Schemas and Types
+export const DevigMethodSchema = z.enum(['multiplicative', 'additive', 'power', 'shin', 'osskewed']);
+export type DevigMethod = z.infer<typeof DevigMethodSchema>;
 
-export interface CalculateEVRequest {
-    offerId: string;
-    sharps: string[];
-    targetBook: string;
-    playerId: string;
-    line: number;
-    side: 'Over' | 'Under';
-    devigMethod: DevigMethod;
-    bankroll?: number;
-}
+export const CalculateEVRequestSchema = z.object({
+    offerId: z.string(),
+    sharps: z.array(z.string()),
+    targetBook: z.string(),
+    playerId: z.string(),
+    line: z.number(),
+    side: z.enum(['Over', 'Under']),
+    devigMethod: DevigMethodSchema,
+    bankroll: z.number().positive().optional(),
+});
+
+export type CalculateEVRequest = z.infer<typeof CalculateEVRequestSchema>;
 
 /**
  * Kelly Criterion bet sizing output.
  * Only included in response when bankroll is provided.
  */
-export interface KellyBetSizing {
+export const KellyBetSizingSchema = z.object({
     /** Full Kelly fraction (what percentage of bankroll to bet) */
-    full: number;
+    full: z.number(),
     /** Quarter Kelly fraction (conservative 0.25x Kelly) */
-    quarter: number;
+    quarter: z.number(),
     /** Recommended bet amount in the same units as bankroll */
-    recommendedBet: number;
+    recommendedBet: z.number(),
     /** Expected profit based on EV and recommended bet */
-    expectedProfit: number;
+    expectedProfit: z.number(),
     /** The bankroll value used for calculation */
-    bankroll: number;
-}
+    bankroll: z.number(),
+});
+
+export type KellyBetSizing = z.infer<typeof KellyBetSizingSchema>;
 
 // Response type
-export interface CalculateEVResponse {
-    player: string;
-    market: string;
-    line: number;
-    side: 'Over' | 'Under';
-    targetBook: string;
-    targetOdds: number;
-    trueProbability: number;
-    impliedProbability: number;
-    expectedValue: number;
-    sharpsUsed: string[];
-    bestAvailableOdds: {
-        sportsbookCode: string;
-        americanOdds: number;
-    };
-    kelly?: KellyBetSizing;
-}
+export const CalculateEVResponseSchema = z.object({
+    player: z.string(),
+    market: z.string(),
+    line: z.number(),
+    side: z.enum(['Over', 'Under']),
+    targetBook: z.string(),
+    targetOdds: z.number(),
+    trueProbability: z.number(),
+    impliedProbability: z.number(),
+    expectedValue: z.number(),
+    sharpsUsed: z.array(z.string()),
+    bestAvailableOdds: z.object({
+        sportsbookCode: z.string(),
+        americanOdds: z.number(),
+    }),
+    kelly: KellyBetSizingSchema.optional(),
+});
+
+export type CalculateEVResponse = z.infer<typeof CalculateEVResponseSchema>;
 
 // Result type for error handling
 export type Result<T, E extends Error = Error> =
@@ -192,24 +149,28 @@ export type Result<T, E extends Error = Error> =
  * A single item in a batch EV calculation request.
  * Note: offerId is shared across all items in the batch.
  */
-export interface BatchEVItem {
-    playerId: string;
-    line: number;
-    side: 'Over' | 'Under';
-    targetBook: string;
-    sharps: string[];
-    devigMethod: DevigMethod;
-    bankroll?: number;
-}
+export const BatchEVItemSchema = z.object({
+    playerId: z.string(),
+    line: z.number(),
+    side: z.enum(['Over', 'Under']),
+    targetBook: z.string(),
+    sharps: z.array(z.string()).min(1),
+    devigMethod: DevigMethodSchema,
+    bankroll: z.number().positive().optional(),
+});
+
+export type BatchEVItem = z.infer<typeof BatchEVItemSchema>;
 
 /**
  * Request body for batch EV calculation.
  * All items must share the same offerId.
  */
-export interface BatchCalculateEVRequest {
-    offerId: string;
-    items: BatchEVItem[];
-}
+export const BatchCalculateEVRequestSchema = z.object({
+    offerId: z.string(),
+    items: z.array(BatchEVItemSchema).min(1).max(10, 'Maximum batch size is 10 items'),
+});
+
+export type BatchCalculateEVRequest = z.infer<typeof BatchCalculateEVRequestSchema>;
 
 /**
  * Result for a single item in a batch response.

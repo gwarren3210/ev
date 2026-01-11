@@ -1,6 +1,7 @@
 import { getRedisClient } from './redis.js';
 import { getEnvironment } from '../config/env.js';
 import type { Offer, CalculateEVRequest, CalculateEVResponse } from '../types/index.js';
+import { OfferSchema, CalculateEVResponseSchema } from '../types/index.js';
 
 // ============================================
 // Cache Key Constants
@@ -25,7 +26,12 @@ export async function getCachedOfferData(offerId: string, playerId: string): Pro
         const key = `${API_CACHE_PREFIX}${offerId}:${playerId}`;
         const cached = await client.get(key);
         if (cached) {
-            return JSON.parse(cached) as Offer;
+            const parsed = OfferSchema.safeParse(JSON.parse(cached));
+            if (parsed.success) {
+                return parsed.data;
+            }
+            console.warn('Cache validation failed for offer data');
+            return null;
         }
     } catch (err) {
         console.error('Redis get error (offer):', err);
@@ -111,7 +117,12 @@ export async function getCachedEVResult(req: CalculateEVRequest): Promise<Calcul
         const key = generateEVCacheKey(req);
         const cached = await client.get(key);
         if (cached) {
-            return JSON.parse(cached) as CalculateEVResponse;
+            const parsed = CalculateEVResponseSchema.safeParse(JSON.parse(cached));
+            if (parsed.success) {
+                return parsed.data;
+            }
+            console.warn('Cache validation failed for EV result');
+            return null;
         }
     } catch (err) {
         console.error('Redis get error (EV):', err);

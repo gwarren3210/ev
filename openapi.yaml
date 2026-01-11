@@ -8,14 +8,12 @@ info:
     This service fetches live odds from the OddsShopper API, removes bookmaker vigorish
     using various devigging algorithms, and calculates the true expected value of a bet
     by comparing a target book's odds against aggregated sharp book probabilities.
-  version: 1.0.0
+  version: 1.0.1
   contact:
     name: API Support
 servers:
-  - url: http://localhost:8080
-    description: Local development server
-  - url: https://your-domain.vercel.app
-    description: Production server
+  - url: https://stokastic.vercel.app
+
 
 paths:
   /calculate-ev:
@@ -43,35 +41,35 @@ paths:
               $ref: '#/components/schemas/CalculateEVRequest'
             examples:
               basic:
-                summary: Basic EV calculation
+                summary: Basic EV calculation (NBA Points)
                 value:
-                  offerId: "nba-player-points"
-                  playerId: "player-123"
-                  sharps: ["Pinnacle", "BookMaker"]
-                  targetBook: "DraftKings"
+                  offerId: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
+                  playerId: "fd4f1c0d-eac1-4212-a411-7aee8a94ed54"
+                  sharps: ["PINNACLE", "BOOKMAKER"]
+                  targetBook: "DRAFTKINGS"
                   line: 25.5
                   side: "Over"
                   devigMethod: "multiplicative"
               multipleSharpBooks:
-                summary: Using multiple sharp books
+                summary: Using multiple sharp books (NFL Yards)
                 value:
-                  offerId: "nfl-player-yards"
-                  playerId: "player-456"
-                  sharps: ["Pinnacle", "BookMaker", "Circa"]
-                  targetBook: "FanDuel"
+                  offerId: "274fde84-066e-46ee-96bb-e76c98e1115a"
+                  playerId: "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e"
+                  sharps: ["PINNACLE", "BOOKMAKER", "CIRCA"]
+                  targetBook: "FANDUEL"
                   line: 75.5
                   side: "Under"
                   devigMethod: "power"
               skewedMethod:
-                summary: Using OS Skewed method
+                summary: Using OS Skewed method (MLB Hits)
                 value:
-                  offerId: "mlb-player-hits"
-                  playerId: "player-789"
-                  sharps: ["Pinnacle"]
-                  targetBook: "BetMGM"
+                  offerId: "550b8fc7-d7e7-46ab-8fa6-faf07ea98372"
+                  playerId: "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f"
+                  sharps: ["PINNACLE"]
+                  targetBook: "BETMGM"
                   line: 1.5
                   side: "Over"
-                  devigMethod: "os_skewed"
+                  devigMethod: "osskewed"
       responses:
         '200':
           description: EV calculated successfully
@@ -87,14 +85,14 @@ paths:
                     market: "Points"
                     line: 25.5
                     side: "Over"
-                    targetBook: "DraftKings"
+                    targetBook: "DRAFTKINGS"
                     targetOdds: 110
                     trueProbability: 0.55
                     impliedProbability: 0.48
                     expectedValue: 15.5
-                    sharpsUsed: ["Pinnacle", "BookMaker"]
+                    sharpsUsed: ["PINNACLE", "BOOKMAKER"]
                     bestAvailableOdds:
-                      sportsbookCode: "Pinnacle"
+                      sportsbookCode: "PINNACLE"
                       americanOdds: 115
                 negativeEV:
                   summary: Negative EV bet
@@ -103,14 +101,14 @@ paths:
                     market: "Three Pointers Made"
                     line: 3.5
                     side: "Under"
-                    targetBook: "FanDuel"
+                    targetBook: "FANDUEL"
                     targetOdds: -120
                     trueProbability: 0.48
                     impliedProbability: 0.55
                     expectedValue: -7.69
-                    sharpsUsed: ["Pinnacle"]
+                    sharpsUsed: ["PINNACLE"]
                     bestAvailableOdds:
-                      sportsbookCode: "FanDuel"
+                      sportsbookCode: "FANDUEL"
                       americanOdds: -120
                 withKelly:
                   summary: With Kelly bet sizing
@@ -119,14 +117,14 @@ paths:
                     market: "Points"
                     line: 25.5
                     side: "Over"
-                    targetBook: "DraftKings"
+                    targetBook: "DRAFTKINGS"
                     targetOdds: 110
                     trueProbability: 0.55
                     impliedProbability: 0.48
                     expectedValue: 15.5
-                    sharpsUsed: ["Pinnacle", "BookMaker"]
+                    sharpsUsed: ["PINNACLE", "BOOKMAKER"]
                     bestAvailableOdds:
-                      sportsbookCode: "Pinnacle"
+                      sportsbookCode: "PINNACLE"
                       americanOdds: 115
                     kelly:
                       full: 0.078
@@ -153,17 +151,17 @@ paths:
                 offerNotFound:
                   summary: Offer not found
                   value:
-                    error: "Offer not found for ID: invalid-offer-123"
+                    error: "Offer not found for ID: 00000000-0000-0000-0000-000000000000"
                     code: "OFFER_NOT_FOUND"
                 offerNotFoundForPlayer:
                   summary: Player not found in offer
                   value:
-                    error: "Offer not found for player ID: player-123"
+                    error: "Offer not found for player ID: 00000000-0000-0000-0000-000000000000"
                     code: "OFFER_NOT_FOUND_FOR_PLAYER"
                 targetOutcomeNotFound:
                   summary: Target book not available
                   value:
-                    error: "Target outcome not found for book: UnknownBook"
+                    error: "Target outcome not found for book: UNKNOWNBOOK"
                     code: "TARGET_OUTCOME_NOT_FOUND"
         '409':
           description: One-sided market error
@@ -172,7 +170,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
               example:
-                error: "Target outcome not complete for book: DraftKings"
+                error: "Target outcome not complete for book: DRAFTKINGS"
                 code: "ONE_SIDED_MARKET"
         '422':
           description: Calculation error
@@ -184,7 +182,7 @@ paths:
                 noSharpBooks:
                   summary: No sharp books available
                   value:
-                    error: "No sharp outcomes found for sharps: Pinnacle, BookMaker"
+                    error: "No sharp outcomes found for sharps: PINNACLE, BOOKMAKER"
                     code: "NO_SHARP_OUTCOMES"
                 devigError:
                   summary: Devigging failed
@@ -208,6 +206,52 @@ paths:
               example:
                 error: "Upstream error: Service Unavailable"
                 code: "API_ERROR"
+
+  /calculate-ev/sample:
+    get:
+      summary: Get Sample EV Request
+      description: |
+        Returns a sample request body for the /calculate-ev endpoint using live market data.
+
+        This is useful for testing the API or understanding the request format.
+        The sample is generated from current live odds data.
+      operationId: getSampleEVRequest
+      tags:
+        - EV Calculation
+      responses:
+        '200':
+          description: Sample request generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SampleResponse'
+              example:
+                description: "Sample request for LeBron James"
+                request:
+                  offerId: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
+                  playerId: "fd4f1c0d-eac1-4212-a411-7aee8a94ed54"
+                  line: 25.5
+                  side: "Over"
+                  targetBook: "DRAFTKINGS"
+                  sharps: ["PINNACLE"]
+                  devigMethod: "multiplicative"
+                curl: "curl -X POST 'https://stokastic.vercel.app/calculate-ev' -H 'Content-Type: application/json' -d '{\"offerId\":\"aa4dd9a9-6aec-44f9-8ae0-3599520b9351\",\"playerId\":\"fd4f1c0d-eac1-4212-a411-7aee8a94ed54\",\"line\":25.5,\"side\":\"Over\",\"targetBook\":\"DRAFTKINGS\",\"sharps\":[\"PINNACLE\"],\"devigMethod\":\"multiplicative\"}'"
+        '503':
+          description: No live sample data available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+              example:
+                error: "No live sample data available"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+              example:
+                error: "Internal server error"
 
   /calculate-ev/batch:
     post:
@@ -235,27 +279,27 @@ paths:
               $ref: '#/components/schemas/BatchCalculateEVRequest'
             examples:
               basic:
-                summary: Batch of 3 players
+                summary: Batch of 3 NBA players
                 value:
-                  offerId: "nba-player-points"
+                  offerId: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
                   items:
-                    - playerId: "player-123"
+                    - playerId: "fd4f1c0d-eac1-4212-a411-7aee8a94ed54"
                       line: 25.5
                       side: "Over"
-                      targetBook: "DraftKings"
-                      sharps: ["Pinnacle", "BookMaker"]
+                      targetBook: "DRAFTKINGS"
+                      sharps: ["PINNACLE", "BOOKMAKER"]
                       devigMethod: "multiplicative"
-                    - playerId: "player-456"
-                      line: 18.5
+                    - playerId: "e7b2c4d1-3f5a-4b8e-9c6d-2a1b3e4f5678"
+                      line: 22.5
                       side: "Under"
-                      targetBook: "FanDuel"
-                      sharps: ["Pinnacle"]
+                      targetBook: "FANDUEL"
+                      sharps: ["PINNACLE"]
                       devigMethod: "power"
-                    - playerId: "player-789"
-                      line: 7.5
+                    - playerId: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                      line: 12.5
                       side: "Over"
-                      targetBook: "BetMGM"
-                      sharps: ["Pinnacle", "Circa"]
+                      targetBook: "BETMGM"
+                      sharps: ["PINNACLE", "CIRCA"]
                       devigMethod: "multiplicative"
                       bankroll: 1000
       responses:
@@ -269,7 +313,7 @@ paths:
                 allSuccess:
                   summary: All items succeeded
                   value:
-                    offerId: "nba-player-points"
+                    offerId: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
                     totalItems: 2
                     successCount: 2
                     errorCount: 0
@@ -281,35 +325,35 @@ paths:
                           market: "Points"
                           line: 25.5
                           side: "Over"
-                          targetBook: "DraftKings"
+                          targetBook: "DRAFTKINGS"
                           targetOdds: -110
                           trueProbability: 0.55
                           impliedProbability: 0.52
                           expectedValue: 5.8
-                          sharpsUsed: ["Pinnacle", "BookMaker"]
+                          sharpsUsed: ["PINNACLE", "BOOKMAKER"]
                           bestAvailableOdds:
-                            sportsbookCode: "Pinnacle"
+                            sportsbookCode: "PINNACLE"
                             americanOdds: -105
                       - index: 1
                         success: true
                         result:
                           player: "Anthony Davis"
                           market: "Points"
-                          line: 18.5
+                          line: 22.5
                           side: "Under"
-                          targetBook: "FanDuel"
+                          targetBook: "FANDUEL"
                           targetOdds: -115
                           trueProbability: 0.48
                           impliedProbability: 0.53
                           expectedValue: -9.4
-                          sharpsUsed: ["Pinnacle"]
+                          sharpsUsed: ["PINNACLE"]
                           bestAvailableOdds:
-                            sportsbookCode: "FanDuel"
+                            sportsbookCode: "FANDUEL"
                             americanOdds: -115
                 partialSuccess:
                   summary: Some items failed
                   value:
-                    offerId: "nba-player-points"
+                    offerId: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
                     totalItems: 2
                     successCount: 1
                     errorCount: 1
@@ -321,20 +365,20 @@ paths:
                           market: "Points"
                           line: 25.5
                           side: "Over"
-                          targetBook: "DraftKings"
+                          targetBook: "DRAFTKINGS"
                           targetOdds: -110
                           trueProbability: 0.55
                           impliedProbability: 0.52
                           expectedValue: 5.8
-                          sharpsUsed: ["Pinnacle"]
+                          sharpsUsed: ["PINNACLE"]
                           bestAvailableOdds:
-                            sportsbookCode: "Pinnacle"
+                            sportsbookCode: "PINNACLE"
                             americanOdds: -105
                       - index: 1
                         success: false
                         error:
                           code: "OFFER_NOT_FOUND_FOR_PLAYER"
-                          message: "Offer not found for player ID: invalid-player"
+                          message: "Offer not found for player ID: 00000000-0000-0000-0000-000000000000"
         '400':
           description: Invalid request body
           content:
@@ -352,6 +396,66 @@ paths:
                   value:
                     error: "Invalid request body"
                     details: "Maximum batch size is 10 items"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+              example:
+                error: "Internal server error"
+
+  /calculate-ev/batch/sample:
+    get:
+      summary: Get Sample Batch EV Request
+      description: |
+        Returns a sample request body for the /calculate-ev/batch endpoint using live market data.
+
+        This is useful for testing the batch API or understanding the request format.
+        The sample includes multiple players from the same offer.
+      operationId: getSampleBatchEVRequest
+      tags:
+        - EV Calculation
+      responses:
+        '200':
+          description: Sample batch request generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSampleResponse'
+              example:
+                description: "Batch sample with 3 players"
+                playerNames: ["LeBron James", "Anthony Davis", "Austin Reaves"]
+                request:
+                  offerId: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
+                  items:
+                    - playerId: "fd4f1c0d-eac1-4212-a411-7aee8a94ed54"
+                      line: 25.5
+                      side: "Over"
+                      targetBook: "DRAFTKINGS"
+                      sharps: ["PINNACLE"]
+                      devigMethod: "multiplicative"
+                    - playerId: "e7b2c4d1-3f5a-4b8e-9c6d-2a1b3e4f5678"
+                      line: 22.5
+                      side: "Over"
+                      targetBook: "FANDUEL"
+                      sharps: ["PINNACLE"]
+                      devigMethod: "multiplicative"
+                    - playerId: "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
+                      line: 12.5
+                      side: "Over"
+                      targetBook: "BETMGM"
+                      sharps: ["PINNACLE"]
+                      devigMethod: "multiplicative"
+                curl: "curl -X POST 'https://stokastic.vercel.app/calculate-ev/batch' -H 'Content-Type: application/json' -d '{...}'"
+        '503':
+          description: No live sample data available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericError'
+              example:
+                error: "No live sample data available"
         '500':
           description: Internal server error
           content:
@@ -392,23 +496,23 @@ components:
       properties:
         offerId:
           type: string
-          description: The unique offer identifier from OddsShopper API
-          example: "nba-player-points"
+          description: The unique offer identifier from OddsShopper API (UUID format)
+          example: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
         playerId:
           type: string
-          description: The unique player identifier
-          example: "player-123"
+          description: The unique player identifier (UUID format)
+          example: "fd4f1c0d-eac1-4212-a411-7aee8a94ed54"
         sharps:
           type: array
           description: Array of sharp sportsbook codes to aggregate for true probability
           items:
             type: string
           minItems: 1
-          example: ["Pinnacle", "BookMaker", "Circa"]
+          example: ["PINNACLE", "BOOKMAKER", "CIRCA"]
         targetBook:
           type: string
           description: The target sportsbook code to evaluate for EV
-          example: "DraftKings"
+          example: "DRAFTKINGS"
         line:
           type: number
           description: The betting line (e.g., 25.5 points, 1.5 hits)
@@ -420,14 +524,14 @@ components:
           example: "Over"
         devigMethod:
           type: string
-          enum: [multiplicative, additive, power, shin, os_skewed]
+          enum: [multiplicative, additive, power, shin, osskewed]
           description: |
             The devigging method to use:
             - **multiplicative**: Margin proportional to odds (most common)
             - **additive**: Equal vig distribution across outcomes
             - **power**: Logarithmic distribution via binary search
             - **shin**: Assumes insider trading (equivalent to additive for n=2)
-            - **os_skewed**: Over/Under specific (65% vig on Over, 35% on Under)
+            - **osskewed**: Over/Under specific (65% vig on Over, 35% on Under)
           example: "multiplicative"
         bankroll:
           type: number
@@ -471,7 +575,7 @@ components:
         targetBook:
           type: string
           description: Target sportsbook that was evaluated
-          example: "DraftKings"
+          example: "DRAFTKINGS"
         targetOdds:
           type: number
           description: American odds from the target book (e.g., -110, +150)
@@ -497,7 +601,7 @@ components:
           description: Sharp books that were successfully used in the calculation
           items:
             type: string
-          example: ["Pinnacle", "BookMaker"]
+          example: ["PINNACLE", "BOOKMAKER"]
         bestAvailableOdds:
           type: object
           description: Best odds available across all sportsbooks for this side
@@ -508,7 +612,7 @@ components:
             sportsbookCode:
               type: string
               description: The sportsbook offering the best odds
-              example: "Pinnacle"
+              example: "PINNACLE"
             americanOdds:
               type: number
               description: The best American odds available
@@ -566,6 +670,51 @@ components:
           description: Error message
           example: "Internal server error"
 
+    SampleResponse:
+      type: object
+      description: Sample request response for single EV calculation
+      required:
+        - description
+        - request
+        - curl
+      properties:
+        description:
+          type: string
+          description: Human-readable description of the sample
+          example: "Sample request for LeBron James"
+        request:
+          $ref: '#/components/schemas/CalculateEVRequest'
+        curl:
+          type: string
+          description: Ready-to-use curl command
+          example: "curl -X POST 'https://stokastic.vercel.app/calculate-ev' ..."
+
+    BatchSampleResponse:
+      type: object
+      description: Sample request response for batch EV calculation
+      required:
+        - description
+        - playerNames
+        - request
+        - curl
+      properties:
+        description:
+          type: string
+          description: Human-readable description of the sample
+          example: "Batch sample with 3 players"
+        playerNames:
+          type: array
+          description: Names of players included in the sample
+          items:
+            type: string
+          example: ["LeBron James", "Anthony Davis", "Austin Reaves"]
+        request:
+          $ref: '#/components/schemas/BatchCalculateEVRequest'
+        curl:
+          type: string
+          description: Ready-to-use curl command
+          example: "curl -X POST 'https://stokastic.vercel.app/calculate-ev/batch' ..."
+
     KellyBetSizing:
       type: object
       description: Kelly Criterion bet sizing output (only included when bankroll is provided)
@@ -610,8 +759,8 @@ components:
       properties:
         playerId:
           type: string
-          description: The unique player identifier
-          example: "player-123"
+          description: The unique player identifier (UUID format)
+          example: "fd4f1c0d-eac1-4212-a411-7aee8a94ed54"
         line:
           type: number
           description: The betting line
@@ -624,17 +773,17 @@ components:
         targetBook:
           type: string
           description: The target sportsbook code to evaluate for EV
-          example: "DraftKings"
+          example: "DRAFTKINGS"
         sharps:
           type: array
           description: Array of sharp sportsbook codes
           items:
             type: string
           minItems: 1
-          example: ["Pinnacle", "BookMaker"]
+          example: ["PINNACLE", "BOOKMAKER"]
         devigMethod:
           type: string
-          enum: [multiplicative, additive, power, shin, os_skewed]
+          enum: [multiplicative, additive, power, shin, osskewed]
           description: The devigging method to use
           example: "multiplicative"
         bankroll:
@@ -653,8 +802,8 @@ components:
       properties:
         offerId:
           type: string
-          description: The unique offer identifier from OddsShopper API (shared by all items)
-          example: "nba-player-points"
+          description: The unique offer identifier from OddsShopper API (shared by all items, UUID format)
+          example: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
         items:
           type: array
           description: Array of items to calculate EV for (max 10)
@@ -707,7 +856,7 @@ components:
             message:
               type: string
               description: Human-readable error message
-              example: "Offer not found for player ID: player-456"
+              example: "Offer not found for player ID: 00000000-0000-0000-0000-000000000000"
 
     BatchCalculateEVResponse:
       type: object
@@ -721,8 +870,8 @@ components:
       properties:
         offerId:
           type: string
-          description: The offer ID that was processed
-          example: "nba-player-points"
+          description: The offer ID that was processed (UUID format)
+          example: "aa4dd9a9-6aec-44f9-8ae0-3599520b9351"
         totalItems:
           type: integer
           description: Total number of items in the request
