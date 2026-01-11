@@ -36,16 +36,15 @@ export function devigOdds(
     let deviggedProb: number;
     switch (method) {
         case 'additive':
+        case 'shin':
+            // Shin method simplifies to Additive for n=2 outcomes
             deviggedProb = devigAdditive(p1, p2);
             break;
         case 'power':
             deviggedProb = devigPower(p1, p2);
             break;
-        case 'osskeweded':
+        case 'osskewed':
             deviggedProb = devigOsSkewed(p1, p2, label);
-            break;
-        case 'shin':
-            deviggedProb = devigShin(p1, p2);
             break;
         case 'multiplicative':
             deviggedProb = devigMultiplicative(p1, p2);
@@ -55,16 +54,6 @@ export function devigOdds(
     }
 
     return { success: true, value: deviggedProb };
-}
-
-/**
- * Shin Method
- * 
- * Concept: Assumes some traders are "insiders" with perfect knowledge.
- * For n=2, it simplifies to the Additive method.
- */
-function devigShin(p1: number, p2: number): number {
-    return devigAdditive(p1, p2);
 }
 
 /**

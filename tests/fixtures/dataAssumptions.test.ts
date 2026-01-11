@@ -12,7 +12,7 @@ describe('Data Assumptions Validation', () => {
   beforeAll(async () => {
     // Import data.json - test the import assumption
     try {
-      dataImport = await import('../../src/data/data.json');
+      dataImport = await import('./data/data.json');
       offers = Array.isArray(dataImport.default) ? dataImport.default : Array.isArray(dataImport) ? dataImport : [dataImport];
     } catch (error) {
       throw new Error(`Failed to import data.json: ${error}`);

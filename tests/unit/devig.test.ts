@@ -42,12 +42,12 @@ describe("devigOdds Strategies", () => {
     it("calculates OS Skewed correctly", () => {
         // Vig = 0.10.
         // Over: 0.55 - (0.65 * 0.10) = 0.55 - 0.065 = 0.485
-        const result = devigOdds(outcomes, "Over", "osskeweded");
+        const result = devigOdds(outcomes, "Over", "osskewed");
         expect(result.success).toBe(true);
         if (result.success) expect(result.value).toBeCloseTo(0.485);
 
         // Under: 0.55 - (0.35 * 0.10) = 0.55 - 0.035 = 0.515
-        const resultUnder = devigOdds(outcomes, "Under", "osskeweded");
+        const resultUnder = devigOdds(outcomes, "Under", "osskewed");
         expect(resultUnder.success).toBe(true);
         if (resultUnder.success) expect(resultUnder.value).toBeCloseTo(0.515);
     });
@@ -67,7 +67,7 @@ describe("devigOdds Strategies", () => {
             // Over: 0.6 - 0.065 = 0.535
             // Under: 0.5 - 0.035 = 0.465
         ];
-        const result = devigOdds(skewedOutcomes, "Over", "osskeweded");
+        const result = devigOdds(skewedOutcomes, "Over", "osskewed");
         if (result.success) expect(result.value).toBeCloseTo(0.535);
     });
 });

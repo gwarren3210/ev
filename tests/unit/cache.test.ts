@@ -35,6 +35,10 @@ const mockResponse: CalculateEVResponse = {
     impliedProbability: 0.52,
     expectedValue: 5.2,
     sharpsUsed: ["PINNACLE"],
+    bestAvailableOdds: {
+        sportsbookCode: "PINNACLE",
+        americanOdds: -105,
+    },
 };
 
 // ==========================================
